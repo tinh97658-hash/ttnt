@@ -1,0 +1,885 @@
+/**
+ * Game Class - Main game controller
+ * Coordinates all game systems and manages overall game flow
+ */
+class Game {
+    constructor() {
+        this.canvas = null;
+        this.gameEngine = null;
+        this.scoreManager = null;
+        this.uiManager = null;
+        
+        // Game configuration
+        this.config = {
+            gridSize: 8,
+            gemTypes: 6,
+            initialMoves: 30,
+            targetScore: 1000,
+            enableAI: true,
+            enableAnimations: true,
+            enableSound: false, // Will be implemented later
+            debugMode: false
+        };
+                    cons            console.log('🔄 Restoring game state...');
+            
+            // Mark that we're restoring to prevent conflicts in start()
+            this.lastSaveTime = gameState.timestamp ? new Date(gameState.timestamp).getTime() : Date.now();
+            
+            // Restore configuration
+            this.config = { ...this.config, ...gameState.config };
+            
+            // Restore session (preserve existing session structure)
+            this.gameSession = { ...this.gameSession, ...gameState.session };
+            
+            // Restore game engine state
+            this.gameEngine.score = gameState.gameEngine.score;
+            this.gameEngine.moves = gameState.gameEngine.moves;
+            this.gameEngine.level = gameState.gameEngine.level;
+            this.gameEngine.gameState = gameState.gameEngine.gameState || 'playing';
+            this.gameEngine.target = gameState.gameEngine.target;log('🔄 Restoring game state...');
+            
+            // Mark that we're restoring to prevent conflicts in start()
+            this.lastSaveTime = gameState.timestamp ? new Date(gameState.timestamp).getTime() : Date.now();
+            
+            // Restore configuration
+            this.config = { ...this.config, ...gameState.config };
+            
+            // Restore session (preserve existing session structure)
+            this.gameSession = { ...this.gameSession, ...gameState.session };
+            
+            // Restore game engine state
+            this.gameEngine.score = gameState.gameEngine.score;
+            this.gameEngine.moves = gameState.gameEngine.moves;
+            this.gameEngine.level = gameState.gameEngine.level;
+            this.gameEngine.gameState = gameState.gameEngine.gameState || 'playing';
+            this.gameEngine.target = gameState.gameEngine.target;me state
+        this.isInitialized = false;
+        this.isPaused = false;
+        this.gameSession = {
+            startTime: null,
+            endTime: null,
+            totalScore: 0,
+            totalMoves: 0,
+            aiHintsUsed: 0,
+            autoSolvesUsed: 0
+        };
+        
+        // AI components (will be initialized later)
+        this.aiComponents = {
+            hintSystem: null,
+            minimaxSolver: null,
+            patternRecognizer: null
+        };
+    }
+    
+    // Initialize the game
+    async initialize(canvasId = 'game-canvas') {
+        try {
+            // Get canvas element
+            this.canvas = document.getElementById(canvasId);
+            if (!this.canvas) {
+                throw new Error(`Canvas element with id '${canvasId}' not found`);
+            }
+            
+            // Initialize core systems
+            this.initializeGameEngine();
+            this.initializeScoreManager();
+            this.initializeUIManager();
+            
+            // Setup global game reference for debugging
+            if (this.config.debugMode) {
+                window.game = this;
+                window.DEBUG_MODE = true;
+            }
+            
+            // Load saved data
+            this.loadSavedData();
+            
+            // Check for and load complete game state
+            this.clearOldSaveData();
+            const gameStateLoaded = this.loadGameState();
+            
+            // Initialize AI components (asynchronous)
+            if (this.config.enableAI) {
+                await this.initializeAI();
+            }
+            
+            this.isInitialized = true;
+            
+            if (gameStateLoaded) {
+                console.log('✅ Game initialized and previous state restored!');
+            } else {
+                console.log('✅ Game initialized with new state!');
+            }
+            
+            return true;
+        } catch (error) {
+            console.error('Failed to initialize game:', error);
+            this.showError('Game initialization failed: ' + error.message);
+            return false;
+        }
+    }
+    
+    initializeGameEngine() {
+        this.gameEngine = new GameEngine(this.canvas);
+        
+        // Configure game engine
+        this.gameEngine.grid = new Grid(this.config.gridSize, this.config.gridSize);
+        this.gameEngine.moves = this.config.initialMoves;
+        this.gameEngine.target.score = this.config.targetScore;
+        
+        // Set up game engine callbacks
+        this.gameEngine.onGameEnd = (won, stats) => {
+            this.handleGameEnd(won, stats);
+        };
+        
+        this.gameEngine.onScoreChange = (newScore, scoreGained) => {
+            this.handleScoreChange(newScore, scoreGained);
+        };
+        
+        this.gameEngine.onMoveUsed = (movesLeft) => {
+            this.handleMoveUsed(movesLeft);
+        };
+    }
+    
+    initializeScoreManager() {
+        this.scoreManager = new ScoreManager();
+        
+        // Connect score manager to game engine
+        if (this.gameEngine) {
+            this.gameEngine.scoreManager = this.scoreManager;
+        }
+    }
+    
+    initializeUIManager() {
+        this.uiManager = new UIManager(this.gameEngine);
+        
+        // Connect UI manager to score manager
+        this.uiManager.setScoreManager(this.scoreManager);
+        
+        // Set up UI callbacks
+        this.uiManager.onHintRequest = () => {
+            this.gameSession.aiHintsUsed++;
+            return this.requestAIHint();
+        };
+        
+        this.uiManager.onAutoSolve = () => {
+            this.gameSession.autoSolvesUsed++;
+            return this.autoSolve();
+        };
+    }
+    
+    async initializeAI() {
+        console.log('🤖 Initializing AI components...');
+        
+        try {
+            // Initialize real AI components
+            this.aiComponents = {
+                hintSystem: new HintSystem(),
+                minimaxSolver: new MinimaxSolver(3),
+                patternRecognizer: new PatternRecognizer()
+            };
+            
+            console.log('✅ AI components initialized with real algorithms');
+        } catch (error) {
+            console.warn('⚠️ AI initialization failed, using fallbacks:', error);
+            
+            // Fallback AI components
+            this.aiComponents = {
+                hintSystem: {
+                    analyze: (grid) => {
+                        const moves = grid.findAllPossibleMoves();
+                        if (moves.length > 0) {
+                            return {
+                                gem1: moves[0].gem1,
+                                gem2: moves[0].gem2,
+                                confidence: 50,
+                                reason: "Fallback suggestion",
+                                matchInfo: { estimatedScore: 30 }
+                            };
+                        }
+                        return null;
+                    }
+                },
+                minimaxSolver: {
+                    findBestMove: (boardState, depth = 3) => {
+                        const moves = this.gameEngine.grid.findAllPossibleMoves();
+                        return moves.length > 0 ? moves[0] : null;
+                    }
+                },
+                patternRecognizer: {
+                    recognizePatterns: (boardState) => {
+                        return [];
+                    }
+                }
+            };
+        }
+    }
+    
+    // Start the game
+    start() {
+        if (!this.isInitialized) {
+            console.error('Game not initialized. Call initialize() first.');
+            return false;
+        }
+        
+        // Only reset session if game wasn't restored from saved state
+        if (!this.gameSession || !this.gameSession.startTime) {
+            console.log('🆕 Starting new game session');
+            this.gameSession.startTime = Date.now();
+            this.gameSession.totalScore = 0;
+            this.gameSession.totalMoves = 0;
+            this.gameSession.aiHintsUsed = 0;
+            this.gameSession.autoSolvesUsed = 0;
+        } else {
+            console.log('🔄 Continuing restored game session');
+        }
+        
+        // Start game engine (only if not already running)
+        if (this.gameEngine.gameState !== 'playing') {
+            this.gameEngine.start();
+        }
+        
+        // Update UI to reflect current state
+        this.uiManager.updateGameUI({
+            score: this.scoreManager.score,
+            moves: this.gameEngine.moves,
+            level: this.scoreManager.level
+        });
+        
+        console.log('🚀 Game started!');
+        
+        // Auto-save initial game state (only if this is truly a new game)
+        if (!this.lastSaveTime || Date.now() - this.lastSaveTime > 5000) {
+            this.autoSave();
+        }
+        
+        return true;
+    }
+    
+    // Restart the game
+    restart() {
+        if (!this.isInitialized) return false;
+        
+        // Reset all systems
+        this.gameEngine.restart();
+        this.scoreManager.reset();
+        this.uiManager.clearHints();
+        
+        // Start new session
+        this.start();
+        
+        console.log('🔄 Game restarted!');
+        
+        // Auto-save after restart
+        this.autoSave();
+        
+        return true;
+    }
+    
+    // Pause/Resume the game
+    togglePause() {
+        if (!this.isInitialized) return false;
+        
+        this.isPaused = !this.isPaused;
+        this.gameEngine.pause();
+        
+        if (this.isPaused) {
+            console.log('⏸️ Game paused');
+        } else {
+            console.log('▶️ Game resumed');
+        }
+        
+        return this.isPaused;
+    }
+    
+    // Handle score changes
+    handleScoreChange(newScore, scoreGained) {
+        this.gameSession.totalScore = newScore;
+        
+        // Update UI
+        this.uiManager.updateGameUI({
+            score: newScore,
+            moves: this.gameEngine.moves,
+            level: this.scoreManager.level
+        });
+        
+        // Check for achievements or milestones
+        this.checkMilestones(newScore, scoreGained);
+        
+        // Auto-save game state after score changes
+        this.autoSave();
+    }
+    
+    // Handle move usage
+    handleMoveUsed(movesLeft) {
+        this.gameSession.totalMoves++;
+        
+        // Update UI
+        this.uiManager.updateGameUI({
+            score: this.scoreManager.score,
+            moves: movesLeft,
+            level: this.scoreManager.level
+        });
+        
+        // AI analysis for adaptive difficulty
+        if (this.config.enableAI && movesLeft <= 10) {
+            this.analyzeGameProgress();
+        }
+        
+        // Auto-save game state after moves
+        this.autoSave();
+    }
+    
+    // Handle game end
+    handleGameEnd(won, stats) {
+            this.gameSession.endTime = Date.now();
+    
+            console.log(won ? '🏆 Game won!' : '💀 Game over!');
+    
+            // Save game data
+            this.saveGameData();
+    
+            // Show end screen
+            this.uiManager.showGameOver(won, stats);
+    
+            // Log session summary
+            this.logSessionSummary();
+        }
+    
+    // Request AI hint
+    requestAIHint() {
+        if (!this.config.enableAI || !this.aiComponents.hintSystem) {
+            console.warn('AI hints not available');
+            return null;
+        }
+
+        // Use the correct method name
+        const hint = this.aiComponents.hintSystem.suggestMove(this.gameEngine.grid);
+
+        if (hint) {
+            console.log('🧠 AI Hint:', hint);
+            
+            // Show visual hint on the game board
+            this.showVisualHint(hint);
+            
+            // Show detailed AI analysis in UI
+            this.uiManager.showAIAnalysis(hint.reason, {
+                gem1: hint.gem1,
+                gem2: hint.gem2,
+                confidence: hint.confidence,
+                expectedScore: hint.matchInfo.estimatedScore,
+                matchInfo: hint.matchInfo
+            });
+            
+            // Vietnamese instruction
+            this.uiManager.showNotification(
+                `💡 AI gợi ý: Swap ô (${hint.gem1.row + 1},${hint.gem1.col + 1}) với ô (${hint.gem2.row + 1},${hint.gem2.col + 1}) - ${hint.reason}`, 
+                'info', 
+                5000
+            );
+            
+            // Auto-save after using hint
+            this.autoSave();
+        }
+
+        return hint;
+    }
+    
+    // Show visual hint on the game board
+    showVisualHint(hint) {
+        if (!hint || !hint.gem1 || !hint.gem2) return;
+        
+        console.log(`🎯 Visual Hint: Highlighting gems at (${hint.gem1.row},${hint.gem1.col}) and (${hint.gem2.row},${hint.gem2.col})`);
+        
+        // Clear any existing hints
+        this.clearVisualHint();
+        
+        // Add visual indicators to the gems
+        const gem1 = this.gameEngine.grid.gems[hint.gem1.row][hint.gem1.col];
+        const gem2 = this.gameEngine.grid.gems[hint.gem2.row][hint.gem2.col];
+        
+        if (gem1 && gem2) {
+            // Mark gems for highlighting
+            gem1.isHinted = true;
+            gem2.isHinted = true;
+            
+            console.log(`✅ Gems marked for highlighting: gem1=${gem1.type} at (${gem1.row},${gem1.col}), gem2=${gem2.type} at (${gem2.row},${gem2.col})`);
+            
+            // Store hint info for drawing arrows/animations
+            this.currentHint = {
+                gem1: hint.gem1,
+                gem2: hint.gem2,
+                startTime: Date.now(),
+                duration: 6000, // Show hint for 6 seconds
+                reason: hint.reason
+            };
+            
+            // Force a redraw to show the hint immediately
+            this.gameEngine.draw();
+            
+            // Auto-clear hint after duration
+            setTimeout(() => {
+                this.clearVisualHint();
+            }, this.currentHint.duration);
+            
+        } else {
+            console.error('❌ Could not find gems to highlight:', gem1, gem2);
+        }
+    }
+    
+    // Clear visual hint indicators
+    clearVisualHint() {
+        console.log('🔄 Clearing visual hints...');
+        
+        // Remove hint markers from all gems
+        let hintsCleared = 0;
+        for (let row = 0; row < this.gameEngine.grid.rows; row++) {
+            for (let col = 0; col < this.gameEngine.grid.cols; col++) {
+                const gem = this.gameEngine.grid.gems[row][col];
+                if (gem && gem.isHinted) {
+                    gem.isHinted = false;
+                    hintsCleared++;
+                }
+            }
+        }
+        
+        console.log(`✅ Cleared ${hintsCleared} hint markers`);
+        
+        this.currentHint = null;
+        this.uiManager.clearHints();
+        
+        // Force redraw to remove highlights
+        this.gameEngine.draw();
+    }        // Auto-solve one move
+        autoSolve() {
+            if (!this.config.enableAI || !this.aiComponents.minimaxSolver) {
+                console.warn('Auto-solve not available');
+                return false;
+            }
+    
+            const boardState = this.gameEngine.grid.getBoardState();
+            const bestMove = this.aiComponents.minimaxSolver.findBestMove(boardState);
+    
+            if (bestMove) {
+                console.log('🤖 Auto-solving with move:', bestMove);
+
+                // Execute the move
+                const gem1 = this.gameEngine.grid.gems[bestMove.gem1.row][bestMove.gem1.col];
+                const gem2 = this.gameEngine.grid.gems[bestMove.gem2.row][bestMove.gem2.col];
+
+                if (gem1 && gem2) {
+                    this.gameEngine.performMove(gem1, gem2);
+                    
+                    // Auto-save after auto-solve
+                    this.autoSave();
+                    
+                    return true;
+                }
+            }            return false;
+        }
+    
+        // Analyze current game progress
+        analyzeGameProgress() {
+            const progress = {
+                scoreProgress: this.scoreManager.score / this.config.targetScore,
+                moveProgress: (this.config.initialMoves - this.gameEngine.moves) / this.config.initialMoves,
+                efficiency: this.scoreManager.stats.efficiency
+            };
+    
+            // Adaptive difficulty adjustment
+            if (progress.scoreProgress < 0.3 && progress.moveProgress > 0.5) {
+                // Player struggling, maybe provide hints
+                console.log('📊 Player may need assistance');
+            } else if (progress.scoreProgress > 0.8 && progress.moveProgress < 0.6) {
+                // Player doing very well
+                console.log('📊 Player performing excellently');
+            }
+    
+            return progress;
+        }
+    
+        // Check for game milestones
+        checkMilestones(score, scoreGained) {
+            const milestones = [100, 500, 1000, 2500, 5000];
+    
+            milestones.forEach(milestone => {
+                if (score >= milestone && (score - scoreGained) < milestone) {
+                    this.uiManager.showNotification(`🎯 Milestone: ${milestone} points!`, 'success');
+                }
+            });
+        }
+    
+    // Save game data
+    saveGameData() {
+        const gameData = {
+            session: this.gameSession,
+            score: this.scoreManager.getStats(),
+            config: this.config,
+            timestamp: new Date().toISOString()
+        };
+
+        try {
+            localStorage.setItem('diamond_crush_session', JSON.stringify(gameData));
+            this.scoreManager.saveToLocalStorage();
+            console.log('💾 Game data saved');
+        } catch (error) {
+            console.warn('Failed to save game data:', error);
+        }
+    }
+    
+    // Save complete game state including board
+    saveGameState() {
+        if (!this.isInitialized) return false;
+        
+        try {
+            const gameState = {
+                // Game metadata
+                version: '1.0.0',
+                timestamp: new Date().toISOString(),
+                
+                // Game configuration
+                config: { ...this.config },
+                
+                // Current game session
+                session: { ...this.gameSession },
+                
+                // Game engine state
+                gameEngine: {
+                    score: this.gameEngine.score,
+                    moves: this.gameEngine.moves,
+                    level: this.gameEngine.level,
+                    gameState: this.gameEngine.gameState,
+                    target: this.gameEngine.target
+                },
+                
+                // Score manager state
+                scoreManager: this.scoreManager.getStats(),
+                
+                // Board state
+                board: {
+                    rows: this.gameEngine.grid.rows,
+                    cols: this.gameEngine.grid.cols,
+                    gems: this.serializeBoardState()
+                },
+                
+                // AI state (if available)
+                aiState: {
+                    hintsUsed: this.gameSession.aiHintsUsed,
+                    autoSolvesUsed: this.gameSession.autoSolvesUsed,
+                    currentHint: this.currentHint ? {
+                        gem1: this.currentHint.gem1,
+                        gem2: this.currentHint.gem2,
+                        reason: this.currentHint.reason
+                    } : null
+                }
+            };
+            
+            localStorage.setItem('diamond_crush_game_state', JSON.stringify(gameState));
+            localStorage.setItem('diamond_crush_last_save', Date.now().toString());
+            
+            console.log('💾 Auto-saved game state to localStorage');
+            
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to save game state:', error);
+            this.uiManager.showNotification('❌ Lỗi lưu game!', 'error', 3000);
+            return false;
+        }
+    }
+    
+    // Serialize board state for saving
+    serializeBoardState() {
+        const serializedGems = [];
+        
+        for (let row = 0; row < this.gameEngine.grid.rows; row++) {
+            serializedGems[row] = [];
+            for (let col = 0; col < this.gameEngine.grid.cols; col++) {
+                const gem = this.gameEngine.grid.gems[row][col];
+                if (gem) {
+                    serializedGems[row][col] = {
+                        type: gem.type,
+                        row: gem.row,
+                        col: gem.col,
+                        selected: gem.selected,
+                        matched: gem.matched,
+                        falling: gem.falling,
+                        isSpecial: gem.isSpecial || false,
+                        isHinted: gem.isHinted || false
+                    };
+                } else {
+                    serializedGems[row][col] = null;
+                }
+            }
+        }
+        
+        return serializedGems;
+    }
+    
+    // Load saved data
+    loadSavedData() {
+        try {
+            const savedData = this.scoreManager.loadFromLocalStorage();
+            console.log('📖 Loaded saved data:', savedData);
+        } catch (error) {
+            console.warn('Failed to load saved data:', error);
+        }
+    }
+    
+    // Load complete game state from localStorage
+    loadGameState() {
+        try {
+            const savedState = localStorage.getItem('diamond_crush_game_state');
+            const lastSave = localStorage.getItem('diamond_crush_last_save');
+            
+            if (!savedState) {
+                console.log('📄 No saved game state found, starting new game');
+                return false;
+            }
+            
+            const gameState = JSON.parse(savedState);
+            const saveTime = lastSave ? new Date(parseInt(lastSave)) : new Date(gameState.timestamp);
+            const timeSinceLastSave = Date.now() - saveTime.getTime();
+            const hoursSinceLastSave = Math.floor(timeSinceLastSave / (1000 * 60 * 60));
+            
+            console.log(`📖 Found saved game from ${saveTime.toLocaleString()} (${hoursSinceLastSave}h ago)`);
+            
+            // Validate save data version
+            if (gameState.version !== '1.0.0') {
+                console.warn('⚠️ Save data version mismatch, starting new game');
+                return false;
+            }
+            
+            // Auto-restore without asking user
+            console.log('� Auto-restoring saved game state...');
+            return this.restoreGameState(gameState);
+            
+        } catch (error) {
+            console.error('❌ Failed to load game state:', error);
+            this.uiManager.showNotification('❌ Lỗi tải game đã lưu, bắt đầu game mới!', 'warning', 3000);
+            return false;
+        }
+    }
+    
+    // Restore game state from loaded data
+    restoreGameState(gameState) {
+        try {
+            console.log('� Restoring game state...');
+            
+            // Restore configuration
+            this.config = { ...this.config, ...gameState.config };
+            
+            // Restore session
+            this.gameSession = { ...gameState.session };
+            
+            // Restore game engine state
+            this.gameEngine.score = gameState.gameEngine.score;
+            this.gameEngine.moves = gameState.gameEngine.moves;
+            this.gameEngine.level = gameState.gameEngine.level;
+            this.gameEngine.gameState = gameState.gameEngine.gameState;
+            this.gameEngine.target = gameState.gameEngine.target;
+            
+            // Restore score manager
+            this.scoreManager.restoreFromData(gameState.scoreManager);
+            
+            // Restore board state
+            this.restoreBoardState(gameState.board);
+            
+            // Restore AI state
+            this.gameSession.aiHintsUsed = gameState.aiState.hintsUsed || 0;
+            this.gameSession.autoSolvesUsed = gameState.aiState.autoSolvesUsed || 0;
+            
+            // Update UI
+            this.uiManager.updateGameUI({
+                score: this.scoreManager.score,
+                moves: this.gameEngine.moves,
+                level: this.scoreManager.level
+            });
+            
+            // Show restoration success - simple notification
+            this.uiManager.showNotification('🔄 Đã khôi phục game!', 'success', 2000);
+            
+            console.log('✅ Game state restored successfully');
+            return true;
+            
+        } catch (error) {
+            console.error('❌ Failed to restore game state:', error);
+            this.uiManager.showNotification('❌ Lỗi khôi phục game!', 'error', 3000);
+            return false;
+        }
+    }
+    
+    // Restore board state from saved data
+    restoreBoardState(boardData) {
+        if (!boardData || !boardData.gems) return;
+        
+        // Clear current board
+        this.gameEngine.grid.initializeGrid();
+        
+        // Restore gems
+        for (let row = 0; row < boardData.rows; row++) {
+            for (let col = 0; col < boardData.cols; col++) {
+                const gemData = boardData.gems[row][col];
+                if (gemData) {
+                    const gem = new Gem(row, col, gemData.type);
+                    gem.selected = gemData.selected;
+                    gem.matched = gemData.matched;
+                    gem.falling = gemData.falling;
+                    gem.isSpecial = gemData.isSpecial;
+                    gem.isHinted = gemData.isHinted;
+                    
+                    this.gameEngine.grid.gems[row][col] = gem;
+                }
+            }
+        }
+        
+        console.log('✅ Board state restored');
+    }
+    
+    // Check for and clear old save data
+    clearOldSaveData() {
+        try {
+            const lastSave = localStorage.getItem('diamond_crush_last_save');
+            if (lastSave) {
+                const saveTime = parseInt(lastSave);
+                const daysSinceLastSave = (Date.now() - saveTime) / (1000 * 60 * 60 * 24);
+                
+                // Clear saves older than 7 days
+                if (daysSinceLastSave > 7) {
+                    localStorage.removeItem('diamond_crush_game_state');
+                    localStorage.removeItem('diamond_crush_last_save');
+                    console.log('🗑️ Cleared old save data');
+                }
+            }
+        } catch (error) {
+            console.warn('Failed to clear old save data:', error);
+        }
+    }
+    
+    // Auto-save game state (immediate save for better UX)
+    autoSave() {
+        if (!this.isInitialized || this.gameEngine.gameState === 'ended') return;
+        
+        // Immediate save without throttling for better user experience
+        this.saveGameState();
+    }
+    
+    // Manual save (for user-triggered saves)
+    manualSave() {
+        return this.saveGameState();
+    }
+    
+    // Clear all saved data
+    clearSavedData() {
+        try {
+            localStorage.removeItem('diamond_crush_game_state');
+            localStorage.removeItem('diamond_crush_last_save');
+            localStorage.removeItem('diamond_crush_session');
+            localStorage.removeItem('diamond_crush_scores');
+            
+            console.log('🗑️ All saved data cleared');
+            this.uiManager.showNotification('🗑️ Dữ liệu đã được xóa!', 'info', 2000);
+            return true;
+        } catch (error) {
+            console.error('❌ Failed to clear saved data:', error);
+            return false;
+        }
+    }
+    
+    // Get save data info for UI
+    getSaveInfo() {
+        try {
+            const lastSave = localStorage.getItem('diamond_crush_last_save');
+            const savedState = localStorage.getItem('diamond_crush_game_state');
+            
+            if (!lastSave || !savedState) {
+                return { exists: false };
+            }
+            
+            const saveTime = new Date(parseInt(lastSave));
+            const gameState = JSON.parse(savedState);
+            
+            return {
+                exists: true,
+                saveTime: saveTime,
+                score: gameState.scoreManager?.score || 0,
+                moves: gameState.gameEngine?.moves || 0,
+                level: gameState.scoreManager?.level || 1,
+                timeSince: Date.now() - saveTime.getTime()
+            };
+        } catch (error) {
+            console.error('Failed to get save info:', error);
+            return { exists: false };
+        }
+    }
+    
+        // Log session summary for analysis
+        logSessionSummary() {
+            const duration = this.gameSession.endTime - this.gameSession.startTime;
+    
+            const summary = {
+                duration: Math.round(duration / 1000), // seconds
+                finalScore: this.gameSession.totalScore,
+                movesUsed: this.gameSession.totalMoves,
+                efficiency: this.gameSession.totalScore / this.gameSession.totalMoves,
+                aiHintsUsed: this.gameSession.aiHintsUsed,
+                autoSolvesUsed: this.gameSession.autoSolvesUsed,
+                achievements: Array.from(this.scoreManager.achievements)
+            };
+    
+            console.log('📈 Game Session Summary:', summary);
+    
+            // This data could be sent to analytics or used for ML training
+            return summary;
+        }
+    
+        // Show error message
+        showError(message) {
+            console.error('❌ Game Error:', message);
+            if (this.uiManager) {
+                this.uiManager.showNotification(message, 'error', 5000);
+            } else {
+                alert('Game Error: ' + message);
+            }
+        }
+    
+        // Get current game state for debugging/analysis
+        getGameState() {
+            if (!this.isInitialized) return null;
+    
+            return {
+                isInitialized: this.isInitialized,
+                isPaused: this.isPaused,
+                gameEngine: {
+                    gameState: this.gameEngine.gameState,
+                    score: this.gameEngine.score,
+                    moves: this.gameEngine.moves,
+                    level: this.gameEngine.level
+                },
+                scoreManager: this.scoreManager.getStats(),
+                session: this.gameSession,
+                board: this.gameEngine.grid.getBoardState()
+            };
+        }
+    
+        // Configure game settings
+        configure(newConfig) {
+            this.config = { ...this.config, ...newConfig };
+            console.log('⚙️ Game configuration updated:', this.config);
+        }
+    
+        // Cleanup method
+        destroy() {
+            if (this.uiManager) {
+                this.uiManager.destroy();
+            }
+    
+            // Clear references
+            this.canvas = null;
+            this.gameEngine = null;
+            this.scoreManager = null;
+            this.uiManager = null;
+    
+            console.log('🗑️ Game destroyed');
+        }
+    }

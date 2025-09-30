@@ -1,0 +1,88 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Diamond Crush AI - Trí Tuệ Nhân Tạo Game</title>
+    <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+    <div class="game-container">
+        <!-- Header với AI info -->
+        <header class="game-header">
+            <h1>💎 Diamond Crush AI</h1>
+            <div class="ai-panel">
+                <div class="score-panel">
+                    <span>Score: <span id="score">0</span></span>
+                    <span>Moves: <span id="moves">30</span></span>
+                </div>
+                <div class="ai-controls">
+                    <button id="hint-btn" class="ai-btn">🧠 AI Hint</button>
+                    <button id="auto-solve-btn" class="ai-btn">🤖 Auto Solve</button>
+                    <select id="difficulty-select">
+                        <option value="easy">Easy AI</option>
+                        <option value="medium" selected>Medium AI</option>
+                        <option value="hard">Hard AI</option>
+                    </select>
+                </div>
+            </div>
+        </header>
+
+        <!-- Game Board -->
+        <main class="game-main">
+            <div class="board-container">
+                <canvas id="game-canvas" width="480" height="480"></canvas>
+                <div id="hint-overlay" class="hint-overlay"></div>
+            </div>
+            
+            <!-- AI Analysis Panel -->
+            <aside class="ai-analysis">
+                <h3>🔬 AI Analysis</h3>
+                <div id="ai-suggestions" class="ai-suggestions">
+                    <p>Click "AI Hint" để nhận gợi ý từ thuật toán!</p>
+                </div>
+                
+                <h4>📊 Algorithm Performance</h4>
+                <div id="performance-stats">
+                    <div>Minimax Depth: <span id="minimax-depth">3</span></div>
+                    <div>Evaluation Time: <span id="eval-time">0ms</span></div>
+                    <div>Nodes Explored: <span id="nodes-explored">0</span></div>
+                </div>
+
+                <h4>🎯 AI Features</h4>
+                <div class="ai-features">
+                    <label><input type="checkbox" id="show-patterns" checked> Pattern Recognition</label>
+                    <label><input type="checkbox" id="predict-cascade"> Cascade Prediction</label>
+                    <label><input type="checkbox" id="adaptive-difficulty"> Adaptive Difficulty</label>
+                </div>
+            </aside>
+        </main>
+
+        <!-- Algorithm Explanation -->
+        <footer class="algorithm-info">
+            <details>
+                <summary>📖 Algorithms Used in This Game</summary>
+                <div class="algorithm-list">
+                    <div><strong>Minimax:</strong> AI opponent decision making với alpha-beta pruning</div>
+                    <div><strong>Pattern Recognition:</strong> ML để nhận diện optimal moves</div>
+                    <div><strong>A* Search:</strong> Tìm đường đi tối ưu trong complex puzzles</div>
+                    <div><strong>Genetic Algorithm:</strong> Tối ưu hóa level generation (future)</div>
+                </div>
+            </details>
+        </footer>
+    </div>
+
+    <!-- JavaScript Modules -->
+    <script src="js/utils/MathUtils.js"></script>
+    <script src="js/core/Gem.js"></script>
+    <script src="js/core/Grid.js"></script>
+    <script src="js/core/GameEngine.js"></script>
+    <script src="js/ai/MinimaxSolver.js"></script>
+    <script src="js/ai/PatternRecognizer.js"></script>
+    <script src="js/ai/HintSystem.js"></script>
+    <script src="js/managers/ScoreManager.js"></script>
+    <script src="js/managers/UIManager.js"></script>
+    <script src="js/Game.js"></script>
+    <script src="js/main.js"></script>
+</body>
+</html>
