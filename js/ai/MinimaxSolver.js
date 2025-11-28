@@ -7,8 +7,8 @@ class MinimaxSolver {
         this.maxDepth = maxDepth;
         this.nodeCount = 0;
         this.evaluationTime = 0;
-        this.timeBudgetMs = 40; // Hard cap per search to avoid freezing UI
-        this.maxNodes = 10000; // Safety guard
+        this.timeBudgetMs = 20; // Reduced from 40ms to 20ms for better responsiveness
+        this.maxNodes = 5000; // Reduced from 10000 for safety
         this.startTime = 0;
         
         // Evaluation weights for different game features
@@ -19,6 +19,10 @@ class MinimaxSolver {
             specialGems: 2.0,
             centerControl: 0.2
         };
+        
+        // Transposition table for memoization
+        this.transpositionTable = new Map();
+        this.maxTableSize = 1000;
     }
     
     // Find the best move using minimax algorithm
@@ -26,6 +30,9 @@ class MinimaxSolver {
         this.startTime = performance.now();
         this.nodeCount = 0;
         const searchDepth = depth || this.maxDepth;
+        
+        // Clear transposition table for new search
+        this.transpositionTable.clear();
 
         let result;
         try {
@@ -58,18 +65,30 @@ class MinimaxSolver {
             throw new Error('node_limit_exceeded');
         }
         
+        // Check transposition table
+        const boardHash = grid.getBoardHash ? grid.getBoardHash() : this.getSimpleHash(grid);
+        const tableKey = `${boardHash}-${depth}-${isMaximizing}`;
+        if (this.transpositionTable.has(tableKey)) {
+            return this.transpositionTable.get(tableKey);
+        }
+        
         // Base case: reached maximum depth or no moves available
         if (depth === 0) {
-            return {
+            const result = {
                 score: this.evaluateBoard(grid),
                 move: null
             };
+            this.storeInTable(tableKey, result);
+            return result;
         }
 
-    const possibleMoves = grid.findAllPossibleMoves();
+        const possibleMoves = grid.findAllPossibleMoves();
         if (possibleMoves.length === 0) {
-            return { score: this.evaluateBoard(grid), move: null };
+            const result = { score: this.evaluateBoard(grid), move: null };
+            this.storeInTable(tableKey, result);
+            return result;
         }
+        
         let bestMove = null;
         
         if (isMaximizing) {
@@ -102,7 +121,9 @@ class MinimaxSolver {
                 }
             }
             
-            return { score: maxScore, move: bestMove };
+            const result = { score: maxScore, move: bestMove };
+            this.storeInTable(tableKey, result);
+            return result;
             
         } else {
             let minScore = Infinity;
@@ -133,7 +154,9 @@ class MinimaxSolver {
                 }
             }
             
-            return { score: minScore, move: bestMove };
+            const result = { score: minScore, move: bestMove };
+            this.storeInTable(tableKey, result);
+            return result;
         }
     }
     
@@ -362,6 +385,28 @@ class MinimaxSolver {
         return grid.gems[row][col];
     }
     
+    // Store result in transposition table with size limit
+    storeInTable(key, result) {
+        if (this.transpositionTable.size >= this.maxTableSize) {
+            // Remove oldest entry (first entry)
+            const firstKey = this.transpositionTable.keys().next().value;
+            this.transpositionTable.delete(firstKey);
+        }
+        this.transpositionTable.set(key, result);
+    }
+    
+    // Simple hash for grids without getBoardHash method
+    getSimpleHash(grid) {
+        let hash = '';
+        for (let r = 0; r < grid.rows; r++) {
+            for (let c = 0; c < grid.cols; c++) {
+                const gem = grid.gems[r]?.[c];
+                hash += gem ? gem.type : '0';
+            }
+        }
+        return hash;
+    }
+    
     // Set difficulty level
     setDifficulty(difficulty) {
         switch (difficulty) {
@@ -388,4 +433,9 @@ class MinimaxSolver {
             avgTimePerNode: this.nodeCount > 0 ? this.evaluationTime / this.nodeCount : 0
         };
     }
+}
+
+// Export to window
+if (typeof window !== 'undefined') {
+    window.MinimaxSolver = MinimaxSolver;
 }

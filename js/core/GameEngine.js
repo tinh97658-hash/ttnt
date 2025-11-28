@@ -42,6 +42,12 @@ class GameEngine {
 
         // Running state guard to avoid duplicate RAF loops
         this.isRunning = false;
+        this.rafId = null;
+        
+        // Performance optimization: dirty flag
+        this.needsRender = true;
+        this.targetFPS = 60;
+        this.frameInterval = 1000 / this.targetFPS;
         
         this.initializeEventListeners();
     }
@@ -49,12 +55,15 @@ class GameEngine {
     initializeEventListeners() {
         // Mouse events
         this.canvas.addEventListener('mousedown', (e) => this.handleMouseDown(e));
-        this.canvas.addEventListener('mousemove', (e) => this.handleMouseMove(e));
+        // Throttle mousemove to reduce overhead
+        const throttledMouseMove = MathUtils.throttle((e) => this.handleMouseMove(e), 16); // ~60fps
+        this.canvas.addEventListener('mousemove', throttledMouseMove);
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         
         // Touch events for mobile
         this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
-        this.canvas.addEventListener('touchmove', (e) => this.handleTouchMove(e));
+        const throttledTouchMove = MathUtils.throttle((e) => this.handleTouchMove(e), 16);
+        this.canvas.addEventListener('touchmove', throttledTouchMove);
         this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
         
         // Prevent context menu
@@ -63,18 +72,32 @@ class GameEngine {
     
     // Main game loop
     update(currentTime) {
+        if (!this.isRunning) return; // Stop if no longer running
+        
         const deltaTime = currentTime - this.lastFrameTime;
-        this.lastFrameTime = currentTime;
+        
+        // FPS limiting: only update if enough time has passed
+        if (deltaTime < this.frameInterval) {
+            this.rafId = requestAnimationFrame((time) => this.update(time));
+            return;
+        }
+        
+        this.lastFrameTime = currentTime - (deltaTime % this.frameInterval);
         
         if (this.gameState === 'playing') {
             this.updateGameLogic(deltaTime);
         }
         
-        this.updateAnimations(deltaTime);
-        this.render();
+        const hasAnimations = this.updateAnimations(deltaTime);
+        
+        // Only render if something changed
+        if (this.needsRender || hasAnimations) {
+            this.render();
+            this.needsRender = false;
+        }
         
         // Continue game loop
-        requestAnimationFrame((time) => this.update(time));
+        this.rafId = requestAnimationFrame((time) => this.update(time));
     }
     
     updateGameLogic(deltaTime) {
@@ -83,31 +106,44 @@ class GameEngine {
             this.processMatches();
         }
         
-        // Check win/lose conditions
-        this.checkGameEnd();
+        // Check win/lose conditions (defer non-critical check)
+        if (this.moves % 5 === 0) { // Check every 5 frames instead of every frame
+            this.checkGameEnd();
+        }
         
-        // Update AI analysis periodically
-        if (this.aiAnalysis) {
+        // Update AI analysis periodically (low priority)
+        if (this.aiAnalysis && this.moves % 10 === 0) {
             this.updateAIAnalysis();
         }
     }
     
     updateAnimations(deltaTime) {
-        // Process animation queue
-        this.animationQueue = this.animationQueue.filter(animation => {
-            animation.update(deltaTime);
-            return !animation.completed;
-        });
+        let hasAnimations = false;
         
-        // Update gem animations
-        for (let row = 0; row < this.grid.rows; row++) {
-            for (let col = 0; col < this.grid.cols; col++) {
-                const gem = this.grid.gems[row][col];
-                if (gem && gem.animating) {
-                    // Animation is handled in Gem class
+        // Process animation queue
+        if (this.animationQueue.length > 0) {
+            hasAnimations = true;
+            this.animationQueue = this.animationQueue.filter(animation => {
+                animation.update(deltaTime);
+                return !animation.completed;
+            });
+        }
+        
+        // Update gem animations (early exit when found)
+        if (!hasAnimations) {
+            outerLoop:
+            for (let row = 0; row < this.grid.rows; row++) {
+                for (let col = 0; col < this.grid.cols; col++) {
+                    const gem = this.grid.gems[row][col];
+                    if (gem && (gem.animating || gem.falling || gem.destroying)) {
+                        hasAnimations = true;
+                        break outerLoop; // Early exit once animation found
+                    }
                 }
             }
         }
+        
+        return hasAnimations;
     }
     
     processMatches() {
@@ -116,6 +152,7 @@ class GameEngine {
         if (matches.length > 0) {
             this.isProcessingMatches = true;
             this.performance.matchesFound++;
+            this.needsRender = true;
             
             // Calculate score
             const matchScore = this.grid.removeMatches(matches);
@@ -124,6 +161,7 @@ class GameEngine {
             // Apply gravity after match removal
             setTimeout(() => {
                 const moved = this.grid.applyGravity();
+                this.needsRender = true;
                 
                 // Check for cascades
                 setTimeout(() => {
@@ -134,6 +172,7 @@ class GameEngine {
                     if (newMatches.length > 0) {
                         this.performance.cascadesTriggered++;
                     }
+                    this.needsRender = true;
 
                     // Notify external listener after resolution
                     if (this.onStateChanged) {
@@ -197,11 +236,13 @@ class GameEngine {
             this.selectedGem = gem;
             gem.selected = true;
             this.showPossibleMoves(gem);
+            this.needsRender = true;
         } else if (this.selectedGem === gem) {
             // Deselect same gem
             this.selectedGem.selected = false;
             this.selectedGem = null;
             this.clearHints();
+            this.needsRender = true;
         } else {
             // Attempt swap
             if (this.grid.canSwap(this.selectedGem, gem)) {
@@ -213,6 +254,7 @@ class GameEngine {
                 gem.selected = true;
                 this.showPossibleMoves(gem);
             }
+            this.needsRender = true;
         }
     }
     
@@ -431,15 +473,35 @@ class GameEngine {
         // Shuffle board or end game
     }
     
-    // UI Update methods
+    // UI Update methods (batched for performance)
     updateGameUI() {
-        document.getElementById('score').textContent = this.score;
-        document.getElementById('moves').textContent = this.moves;
+        // Batch DOM updates using requestAnimationFrame
+        if (this._uiUpdateScheduled) return;
+        
+        this._uiUpdateScheduled = true;
+        requestAnimationFrame(() => {
+            const scoreEl = document.getElementById('score');
+            const movesEl = document.getElementById('moves');
+            
+            if (scoreEl) scoreEl.textContent = this.score;
+            if (movesEl) movesEl.textContent = this.moves;
+            
+            this._uiUpdateScheduled = false;
+        });
     }
     
     updatePerformanceDisplay() {
-        document.getElementById('eval-time').textContent = `${this.performance.averageThinkTime.toFixed(0)}ms`;
-        document.getElementById('nodes-explored').textContent = this.performance.movesAnalyzed;
+        // Throttle performance updates to reduce DOM manipulation
+        if (!this._perfUpdateThrottled) {
+            this._perfUpdateThrottled = MathUtils.throttle(() => {
+                const evalTimeEl = document.getElementById('eval-time');
+                const nodesEl = document.getElementById('nodes-explored');
+                
+                if (evalTimeEl) evalTimeEl.textContent = `${this.performance.averageThinkTime.toFixed(0)}ms`;
+                if (nodesEl) nodesEl.textContent = this.performance.movesAnalyzed;
+            }, 200); // Update at most every 200ms
+        }
+        this._perfUpdateThrottled();
     }
     
     updateAIAnalysis() {
@@ -510,8 +572,19 @@ class GameEngine {
         if (this.gameState !== 'paused') {
             this.gameState = 'playing';
         }
+        this.needsRender = true;
+        this.lastFrameTime = performance.now();
         this.updateGameUI();
-        this.update(Date.now());
+        this.update(performance.now());
+    }
+    
+    // Stop the game loop
+    stop() {
+        this.isRunning = false;
+        if (this.rafId) {
+            cancelAnimationFrame(this.rafId);
+            this.rafId = null;
+        }
     }
     
     // Restart the game
@@ -530,4 +603,9 @@ class GameEngine {
     pause() {
         this.gameState = this.gameState === 'paused' ? 'playing' : 'paused';
     }
+}
+
+// Export to window
+if (typeof window !== 'undefined') {
+    window.GameEngine = GameEngine;
 }

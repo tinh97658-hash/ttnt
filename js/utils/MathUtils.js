@@ -144,6 +144,31 @@ class MathUtils {
         return (end - start) / iterations;
     }
     
+    // Debounce function to limit execution frequency
+    static debounce(func, wait) {
+        let timeout;
+        return function executedFunction(...args) {
+            const later = () => {
+                clearTimeout(timeout);
+                func(...args);
+            };
+            clearTimeout(timeout);
+            timeout = setTimeout(later, wait);
+        };
+    }
+    
+    // Throttle function to limit execution rate
+    static throttle(func, limit) {
+        let inThrottle;
+        return function executedFunction(...args) {
+            if (!inThrottle) {
+                func(...args);
+                inThrottle = true;
+                setTimeout(() => inThrottle = false, limit);
+            }
+        };
+    }
+    
     // Weighted random selection
     static weightedRandom(items, weights) {
         const totalWeight = weights.reduce((sum, weight) => sum + weight, 0);
@@ -158,4 +183,9 @@ class MathUtils {
         
         return items[items.length - 1];
     }
+}
+
+// Export to window
+if (typeof window !== 'undefined') {
+    window.MathUtils = MathUtils;
 }

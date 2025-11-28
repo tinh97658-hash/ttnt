@@ -400,3 +400,8 @@ class PatternRecognizer {
         }
     }
 }
+
+// Explicitly export to window
+if (typeof window !== 'undefined') {
+    window.PatternRecognizer = PatternRecognizer;
+}

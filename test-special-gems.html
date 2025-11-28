@@ -1,0 +1,191 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Test Special Gems Effects</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 20px;
+            background: #1a1a2e;
+            color: white;
+            font-family: Arial, sans-serif;
+        }
+        canvas {
+            border: 2px solid #0f3460;
+            background: #16213e;
+            display: block;
+            margin: 20px auto;
+        }
+        .controls {
+            text-align: center;
+            margin: 20px;
+        }
+        button {
+            margin: 5px;
+            padding: 10px 20px;
+            font-size: 16px;
+            cursor: pointer;
+            background: #0f3460;
+            color: white;
+            border: none;
+            border-radius: 5px;
+        }
+        button:hover {
+            background: #e94560;
+        }
+        .info {
+            text-align: center;
+            margin: 10px;
+            font-size: 14px;
+            color: #aaa;
+        }
+    </style>
+</head>
+<body>
+    <h1 style="text-align: center;">🎮 Test Special Gems Effects</h1>
+    <div class="info">Click các button để test hiệu ứng destruction của từng loại special gem</div>
+    
+    <canvas id="test-canvas" width="480" height="480"></canvas>
+    
+    <div class="controls">
+        <button onclick="testBomb()">💣 Test Bomb</button>
+        <button onclick="testLightning()">⚡ Test Lightning</button>
+        <button onclick="testRainbow()">🌈 Test Rainbow</button>
+        <button onclick="testAll()">✨ Test All</button>
+        <button onclick="resetTest()">🔄 Reset</button>
+    </div>
+    
+    <div class="info" id="status">Ready to test...</div>
+
+    <script src="js/core/Gem.js"></script>
+    <script>
+        const canvas = document.getElementById('test-canvas');
+        const ctx = canvas.getContext('2d');
+        const gems = [];
+        let animating = false;
+
+        // Create test grid
+        function createTestGrid() {
+            gems.length = 0;
+            for (let row = 0; row < 8; row++) {
+                for (let col = 0; col < 8; col++) {
+                    const gem = new Gem(row, col, (row + col) % 6 + 1);
+                    gems.push(gem);
+                }
+            }
+        }
+
+        function render() {
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw grid background
+            ctx.fillStyle = '#16213e';
+            ctx.fillRect(0, 0, canvas.width, canvas.height);
+            
+            // Draw all gems
+            gems.forEach(gem => {
+                gem.draw(ctx);
+            });
+            
+            // Always continue animation loop to catch destruction effects
+            requestAnimationFrame(render);
+        }
+
+        function testBomb() {
+            animating = true;
+            const centerRow = 4, centerCol = 4;
+            let count = 0;
+            
+            // Destroy 5x5 area
+            for (let dr = -2; dr <= 2; dr++) {
+                for (let dc = -2; dc <= 2; dc++) {
+                    const row = centerRow + dr;
+                    const col = centerCol + dc;
+                    if (row >= 0 && row < 8 && col >= 0 && col < 8) {
+                        const gem = gems.find(g => g.row === row && g.col === col);
+                        if (gem) {
+                            gem.startDestruction('bomb');
+                            count++;
+                        }
+                    }
+                }
+            }
+            
+            updateStatus(`💣 Bomb: Destroying ${count} gems in 5x5 area`);
+            console.log('Bomb test started, destroying', count, 'gems');
+            
+            setTimeout(() => {
+                console.log('Bomb test complete, resetting...');
+                setTimeout(resetTest, 500);
+            }, 1000);
+        }
+
+        function testLightning() {
+            animating = true;
+            const targetRow = 4, targetCol = 4;
+            let count = 0;
+            
+            // Destroy row and column
+            gems.forEach(gem => {
+                if (gem.row === targetRow || gem.col === targetCol) {
+                    gem.startDestruction('lightning');
+                    count++;
+                }
+            });
+            
+            updateStatus(`⚡ Lightning: Destroying ${count} gems in row ${targetRow} and column ${targetCol}`);
+            console.log('Lightning test started, destroying', count, 'gems');
+            
+            setTimeout(() => {
+                console.log('Lightning test complete, resetting...');
+                setTimeout(resetTest, 500);
+            }, 1000);
+        }
+
+        function testRainbow() {
+            animating = true;
+            const targetType = 3; // Green gems
+            let count = 0;
+            
+            // Destroy all gems of same type
+            gems.forEach(gem => {
+                if (gem.type === targetType) {
+                    gem.startDestruction('rainbow');
+                    count++;
+                }
+            });
+            
+            updateStatus(`🌈 Rainbow: Destroying all ${count} green gems`);
+            console.log('Rainbow test started, destroying', count, 'gems');
+            
+            setTimeout(() => {
+                console.log('Rainbow test complete, resetting...');
+                setTimeout(resetTest, 500);
+            }, 1000);
+        }
+
+        function testAll() {
+            updateStatus('✨ Testing all effects in sequence...');
+            testBomb();
+            setTimeout(testLightning, 2000);
+            setTimeout(testRainbow, 4000);
+        }
+
+        function resetTest() {
+            console.log('Resetting test grid...');
+            createTestGrid();
+            updateStatus('Ready to test...');
+        }
+
+        function updateStatus(text) {
+            document.getElementById('status').textContent = text;
+        }
+
+        // Initialize
+        createTestGrid();
+        render();
+    </script>
+</body>
+</html>

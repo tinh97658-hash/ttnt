@@ -307,6 +307,11 @@ class UIManager {
             } catch (e) { /* ignore */ }
         }
         this.currentHints = [];
+        
+        // Force render to remove hint highlights
+        if (this.gameEngine) {
+            this.gameEngine.needsRender = true;
+        }
     }
     
     // Show AI hint visually
@@ -327,16 +332,22 @@ class UIManager {
         
         // Store current hint for visual highlighting
         this.currentHints.push(hintData);
+        
         // Set subtle highlight on hinted gems
         const g1 = this.gameEngine.grid.gems[hintData.gem1.row]?.[hintData.gem1.col];
         const g2 = this.gameEngine.grid.gems[hintData.gem2.row]?.[hintData.gem2.col];
         if (g1) g1.isHinted = true;
         if (g2) g2.isHinted = true;
         
-        // Auto clear after 4s (subtle blink duration)
+        // Force render to show hint highlights
+        if (this.gameEngine) {
+            this.gameEngine.needsRender = true;
+        }
+        
+        // Auto clear after 5s (keep visible longer)
         setTimeout(() => {
             this.clearHints();
-        }, 4000);
+        }, 5000);
     }
     
     // Show AI analysis in sidebar
@@ -557,4 +568,9 @@ class UIManager {
         this.currentHints = [];
         this.animations = [];
     }
+}
+
+// Explicitly export to window
+if (typeof window !== 'undefined') {
+    window.UIManager = UIManager;
 }

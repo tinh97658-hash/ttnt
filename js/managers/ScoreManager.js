@@ -369,3 +369,8 @@ class ScoreManager {
         }
     }
 }
+
+// Explicitly export to window
+if (typeof window !== 'undefined') {
+    window.ScoreManager = ScoreManager;
+}

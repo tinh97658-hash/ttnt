@@ -10,12 +10,27 @@ let game = null;
 document.addEventListener('DOMContentLoaded', async function() {
     console.log('Diamond Crush AI - Starting initialization...');
     
+    // Check if all required classes are loaded
+    const requiredClasses = ['Game', 'GameEngine', 'Grid', 'Gem', 'MathUtils', 'ScoreManager', 'UIManager'];
+    const missingClasses = requiredClasses.filter(className => typeof window[className] === 'undefined');
+    
+    if (missingClasses.length > 0) {
+        console.error('❌ Missing required classes:', missingClasses.join(', '));
+        showErrorMessage(`Missing required files. Please check: ${missingClasses.join(', ')}`);
+        return;
+    }
+    
     // Wait a bit to ensure all scripts are loaded
     await new Promise(resolve => setTimeout(resolve, 100));
     
     try {
         // Create game instance
+        console.log('Creating Game instance...');
+        if (typeof Game === 'undefined') {
+            throw new Error('Game class is not defined. Check if Game.js loaded correctly.');
+        }
         game = new Game();
+        console.log('✓ Game instance created');
         
         // Configure for development/debug mode
         game.configure({
@@ -24,9 +39,12 @@ document.addEventListener('DOMContentLoaded', async function() {
             initialMoves: 30,
             targetScore: 1000
         });
+        console.log('✓ Game configured');
         
         // Initialize game systems
+        console.log('Initializing game systems...');
         const initialized = await game.initialize('game-canvas');
+        console.log('✓ Game systems initialized:', initialized);
         
         if (initialized) {
             // Start the game

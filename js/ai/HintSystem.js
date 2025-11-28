@@ -316,3 +316,8 @@ class HintSystem {
         return Math.min(baseConfidence * 0.7 + choiceConfidence * 0.3, 100);
     }
 }
+
+// Explicitly export to window
+if (typeof window !== 'undefined') {
+    window.HintSystem = HintSystem;
+}

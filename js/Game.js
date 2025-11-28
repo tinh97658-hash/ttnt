@@ -128,14 +128,23 @@ class Game {
         console.log('🖼️ UI Manager initialized');
     }
     
-    // Initialize AI components
+    // Initialize AI components (with lazy loading)
     async initializeAI() {
         try {
-            this.aiComponents.hintSystem = new HintSystem();
-            this.aiComponents.minimaxSolver = new MinimaxSolver();
-            this.aiComponents.patternRecognizer = new PatternRecognizer();
+            // Only initialize AI when explicitly needed
+            if (!this.aiComponents.hintSystem) {
+                this.aiComponents.hintSystem = new HintSystem();
+            }
             
-            console.log('🤖 AI components initialized');
+            if (!this.aiComponents.minimaxSolver) {
+                this.aiComponents.minimaxSolver = new MinimaxSolver();
+            }
+            
+            if (!this.aiComponents.patternRecognizer) {
+                this.aiComponents.patternRecognizer = new PatternRecognizer();
+            }
+            
+            console.log('🤖 AI components initialized (lazy loaded)');
         } catch (error) {
             console.warn('⚠️ AI initialization failed, using fallbacks:', error);
             // Fallback implementations with correct method names
@@ -349,7 +358,7 @@ class Game {
     
     // Request auto solve
     requestAutoSolve() {
-        if (!this.config.enableAI || !this.aiComponents.minimaxSolver) {
+        if (!this.config.enableAI) {
             this.uiManager.showNotification('❌ Auto-solve không khả dụng!', 'error', 2000);
             return false;
         }
@@ -357,34 +366,65 @@ class Game {
         try {
             this.gameSession.autoSolvesUsed++;
             
-            // Get optimal move from AI - use findBestMove for real MinimaxSolver
-            let solution = null;
-            if (this.aiComponents.minimaxSolver.findBestMove) {
-                solution = this.aiComponents.minimaxSolver.findBestMove(this.gameEngine.grid);
-            } else if (this.aiComponents.minimaxSolver.solve) {
-                solution = this.aiComponents.minimaxSolver.solve(this.gameEngine.grid.gems);
-            }
+            // Try to get best move from AI systems in order of preference
+            let bestMove = null;
+            let moveScore = 0;
+            let method = '';
             
-            // If aborted or no move inside solution, fallback to first possible move
-            if ((!solution || !solution.move) && this.gameEngine.grid) {
-                const fallback = this.gameEngine.grid.findAllPossibleMoves()[0];
-                if (fallback) {
-                    solution = { move: fallback, score: fallback.score || 0, aborted: true };
+            // 1. Try HintSystem first (fast and reliable)
+            if (this.aiComponents.hintSystem && this.aiComponents.hintSystem.suggestMove) {
+                const hint = this.aiComponents.hintSystem.suggestMove(this.gameEngine.grid);
+                if (hint && hint.gem1 && hint.gem2) {
+                    bestMove = { gem1: hint.gem1, gem2: hint.gem2 };
+                    moveScore = hint.matchInfo ? hint.matchInfo.estimatedScore : hint.evaluationScore || 0;
+                    method = 'HintSystem';
                 }
             }
             
-            if (solution && solution.move) {
-                this.gameEngine.handleSwap(solution.move.gem1, solution.move.gem2);
-                const suffix = solution.aborted ? ' (fallback)' : '';
-                this.uiManager.showNotification(`🤖 Auto-solve: ${solution.score} điểm${suffix}`, solution.aborted ? 'warning' : 'success', 3000);
-                if (solution.aborted) {
-                    console.warn('Auto-solve used fallback move due to abort/time limit');
+            // 2. Fallback to MinimaxSolver if HintSystem fails
+            if (!bestMove && this.aiComponents.minimaxSolver && this.aiComponents.minimaxSolver.findBestMove) {
+                const solution = this.aiComponents.minimaxSolver.findBestMove(this.gameEngine.grid);
+                if (solution && solution.move && !solution.aborted) {
+                    bestMove = solution.move;
+                    moveScore = solution.score || 0;
+                    method = 'Minimax';
                 }
+            }
+            
+            // 3. Final fallback: use best move from grid
+            if (!bestMove && this.gameEngine.grid) {
+                const possibleMoves = this.gameEngine.grid.findAllPossibleMoves();
+                if (possibleMoves.length > 0) {
+                    bestMove = possibleMoves[0];
+                    moveScore = bestMove.score || 0;
+                    method = 'Fallback';
+                }
+            }
+            
+            // Execute the move
+            if (bestMove && bestMove.gem1 && bestMove.gem2) {
+                this.gameEngine.handleSwap(bestMove.gem1, bestMove.gem2);
+                
+                // Show notification with actual expected score
+                let message = '';
+                if (moveScore > 0) {
+                    message = `🤖 Auto-solve (${method}): ~${moveScore} điểm dự kiến`;
+                } else {
+                    // Edge case: move exists but score calculation returned 0
+                    message = `🤖 Auto-solve (${method}): đang thực hiện...`;
+                }
+                
+                this.uiManager.showNotification(message, 'success', 3000);
+                
+                console.log(`✅ Auto-solve used ${method} - Expected score: ${moveScore}`);
                 this.autoSave();
                 return true;
             }
-            this.uiManager.showNotification('🤖 Không tìm thấy giải pháp!', 'warning', 2000);
+            
+            // No valid moves found
+            this.uiManager.showNotification('🤖 Không tìm thấy nước đi hợp lệ!', 'warning', 2000);
             return false;
+            
         } catch (error) {
             console.error('❌ Auto-solve error:', error);
             this.uiManager.showNotification('❌ Lỗi auto-solve!', 'error', 2000);
@@ -642,4 +682,9 @@ class Game {
             session: this.gameSession
         };
     }
+}
+
+// Export to window
+if (typeof window !== 'undefined') {
+    window.Game = Game;
 }
