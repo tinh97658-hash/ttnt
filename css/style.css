@@ -23,7 +23,11 @@ body {
     background: linear-gradient(135deg, var(--background) 0%, #0f172a 100%);
     color: var(--text-primary);
     min-height: 100vh;
-    overflow-x: auto;
+    overflow-x: hidden;
+    -webkit-tap-highlight-color: transparent; /* Remove tap highlight on mobile */
+    -webkit-touch-callout: none; /* Disable callout */
+    -webkit-user-select: none; /* Disable text selection */
+    user-select: none;
 }
 
 /* Header Styling */
@@ -124,6 +128,9 @@ body {
     cursor: pointer;
     contain: layout style paint;
     will-change: contents;
+    touch-action: none; /* Disable browser touch gestures */
+    -webkit-user-select: none;
+    user-select: none;
 }
 
 /* Hint Overlay */
@@ -259,8 +266,28 @@ body {
 
 /* Responsive Design */
 @media (max-width: 768px) {
+    body {
+        overflow-x: hidden;
+        position: fixed;
+        width: 100%;
+    }
+    
+    .game-container {
+        padding: 0;
+    }
+    
+    .game-header {
+        padding: 0.75rem;
+    }
+    
+    .game-header h1 {
+        font-size: 1.25rem;
+    }
+    
     .game-main {
         grid-template-columns: 1fr;
+        padding: 1rem;
+        gap: 1rem;
     }
     
     .ai-panel {
@@ -270,12 +297,34 @@ body {
     
     .ai-controls {
         justify-content: center;
+        flex-wrap: wrap;
+        gap: 0.5rem;
+    }
+    
+    .ai-btn {
+        padding: 0.5rem 1rem;
+        font-size: 0.9rem;
     }
     
     #game-canvas {
         width: 100%;
         height: auto;
-        max-width: 400px;
+        max-width: min(90vw, 480px);
+        max-height: min(90vw, 480px);
+        touch-action: none;
+    }
+    
+    .board-container {
+        padding: 0;
+    }
+    
+    .ai-analysis {
+        max-height: 300px;
+        overflow-y: auto;
+    }
+    
+    .algorithm-info {
+        font-size: 0.85rem;
     }
 }
 

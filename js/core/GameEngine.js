@@ -60,14 +60,15 @@ class GameEngine {
         this.canvas.addEventListener('mousemove', throttledMouseMove);
         this.canvas.addEventListener('mouseup', (e) => this.handleMouseUp(e));
         
-        // Touch events for mobile
-        this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e));
+        // Touch events for mobile with passive: false to allow preventDefault
+        this.canvas.addEventListener('touchstart', (e) => this.handleTouchStart(e), { passive: false });
         const throttledTouchMove = MathUtils.throttle((e) => this.handleTouchMove(e), 16);
-        this.canvas.addEventListener('touchmove', throttledTouchMove);
-        this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e));
+        this.canvas.addEventListener('touchmove', throttledTouchMove, { passive: false });
+        this.canvas.addEventListener('touchend', (e) => this.handleTouchEnd(e), { passive: false });
         
-        // Prevent context menu
+        // Prevent context menu and double-tap zoom
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
+        this.canvas.style.touchAction = 'none'; // Disable browser touch gestures
     }
     
     // Main game loop
@@ -207,10 +208,15 @@ class GameEngine {
     
     handleTouchStart(e) {
         e.preventDefault();
+        if (this.gameState !== 'playing') return;
+        
         const touch = e.touches[0];
         const rect = this.canvas.getBoundingClientRect();
-        const x = touch.clientX - rect.left;
-        const y = touch.clientY - rect.top;
+        // Scale coordinates to match canvas internal size
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        const x = (touch.clientX - rect.left) * scaleX;
+        const y = (touch.clientY - rect.top) * scaleY;
         
         const gem = this.grid.getGemAt(x, y);
         this.handleGemSelection(gem, x, y);
@@ -218,14 +224,27 @@ class GameEngine {
     
     handleTouchMove(e) {
         e.preventDefault();
+        if (e.touches.length === 0) return;
+        
         const touch = e.touches[0];
         const rect = this.canvas.getBoundingClientRect();
-        this.mousePos.x = touch.clientX - rect.left;
-        this.mousePos.y = touch.clientY - rect.top;
+        const scaleX = this.canvas.width / rect.width;
+        const scaleY = this.canvas.height / rect.height;
+        this.mousePos.x = (touch.clientX - rect.left) * scaleX;
+        this.mousePos.y = (touch.clientY - rect.top) * scaleY;
     }
     
     handleTouchEnd(e) {
         e.preventDefault();
+        if (this.gameState !== 'playing') return;
+        
+        // If touch moved significantly, check for drag-to-swap
+        if (this.selectedGem && this.mousePos.x && this.mousePos.y) {
+            const gem = this.grid.getGemAt(this.mousePos.x, this.mousePos.y);
+            if (gem && gem !== this.selectedGem) {
+                this.handleGemSelection(gem, this.mousePos.x, this.mousePos.y);
+            }
+        }
     }
     
     handleGemSelection(gem, x, y) {
