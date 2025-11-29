@@ -68,7 +68,7 @@ class GameEngine {
         
         // Prevent context menu and double-tap zoom
         this.canvas.addEventListener('contextmenu', (e) => e.preventDefault());
-        this.canvas.style.touchAction = 'none'; // Disable browser touch gestures
+        this.canvas.style.touchAction = 'none'; // Disable browser touch gestures on canvas only
     }
     
     // Main game loop
