@@ -23,6 +23,12 @@ class GameEngine {
         // Input handling
         this.selectedGem = null;
         this.mousePos = { x: 0, y: 0 };
+        this.isProcessingMatches = false;
+        
+        // Touch tracking for mobile
+        this.touchStartPos = { x: 0, y: 0 };
+        this.touchStartGem = null;
+        this.isSwiping = false;
         
         // AI integration points
         this.aiHints = [];
@@ -208,7 +214,7 @@ class GameEngine {
     
     handleTouchStart(e) {
         e.preventDefault();
-        if (this.gameState !== 'playing') return;
+        if (this.gameState !== 'playing' || this.isProcessingMatches) return;
         
         const touch = e.touches[0];
         const rect = this.canvas.getBoundingClientRect();
@@ -218,33 +224,90 @@ class GameEngine {
         const x = (touch.clientX - rect.left) * scaleX;
         const y = (touch.clientY - rect.top) * scaleY;
         
+        // Track touch start position
+        this.touchStartPos = { x, y };
+        this.isSwiping = false;
+        
         const gem = this.grid.getGemAt(x, y);
-        this.handleGemSelection(gem, x, y);
+        if (gem) {
+            this.touchStartGem = gem;
+            // Only select if no gem is currently selected
+            if (!this.selectedGem) {
+                this.handleGemSelection(gem, x, y);
+            }
+        }
     }
     
     handleTouchMove(e) {
         e.preventDefault();
-        if (e.touches.length === 0) return;
+        if (this.gameState !== 'playing' || e.touches.length === 0) return;
         
         const touch = e.touches[0];
         const rect = this.canvas.getBoundingClientRect();
         const scaleX = this.canvas.width / rect.width;
         const scaleY = this.canvas.height / rect.height;
-        this.mousePos.x = (touch.clientX - rect.left) * scaleX;
-        this.mousePos.y = (touch.clientY - rect.top) * scaleY;
+        const x = (touch.clientX - rect.left) * scaleX;
+        const y = (touch.clientY - rect.top) * scaleY;
+        
+        this.mousePos.x = x;
+        this.mousePos.y = y;
+        
+        // Detect if user is swiping (moved more than 20 pixels)
+        if (!this.isSwiping && this.touchStartGem) {
+            const dx = x - this.touchStartPos.x;
+            const dy = y - this.touchStartPos.y;
+            const distance = Math.sqrt(dx * dx + dy * dy);
+            
+            if (distance > 20) {
+                this.isSwiping = true;
+            }
+        }
     }
     
     handleTouchEnd(e) {
         e.preventDefault();
-        if (this.gameState !== 'playing') return;
+        if (this.gameState !== 'playing' || this.isProcessingMatches) return;
         
-        // If touch moved significantly, check for drag-to-swap
-        if (this.selectedGem && this.mousePos.x && this.mousePos.y) {
-            const gem = this.grid.getGemAt(this.mousePos.x, this.mousePos.y);
-            if (gem && gem !== this.selectedGem) {
-                this.handleGemSelection(gem, this.mousePos.x, this.mousePos.y);
+        // If user was swiping, try to swap with gem at end position
+        if (this.isSwiping && this.touchStartGem && this.mousePos.x && this.mousePos.y) {
+            const endGem = this.grid.getGemAt(this.mousePos.x, this.mousePos.y);
+            
+            if (endGem && endGem !== this.touchStartGem) {
+                // Check if gems are adjacent
+                const rowDiff = Math.abs(this.touchStartGem.row - endGem.row);
+                const colDiff = Math.abs(this.touchStartGem.col - endGem.col);
+                
+                if ((rowDiff === 1 && colDiff === 0) || (rowDiff === 0 && colDiff === 1)) {
+                    // Try to swap
+                    if (this.selectedGem) {
+                        this.selectedGem.selected = false;
+                    }
+                    this.selectedGem = this.touchStartGem;
+                    this.selectedGem.selected = true;
+                    
+                    if (this.grid.canSwap(this.touchStartGem, endGem)) {
+                        this.performMove(this.touchStartGem, endGem, 'player');
+                        this.selectedGem = null;
+                    } else {
+                        // Invalid swap, clear selection
+                        this.selectedGem.selected = false;
+                        this.selectedGem = null;
+                    }
+                    this.clearHints();
+                    this.needsRender = true;
+                }
+            }
+        } else if (!this.isSwiping && this.touchStartGem) {
+            // Simple tap - handle as click
+            const gem = this.grid.getGemAt(this.touchStartPos.x, this.touchStartPos.y);
+            if (gem) {
+                this.handleGemSelection(gem, this.touchStartPos.x, this.touchStartPos.y);
             }
         }
+        
+        // Reset touch tracking
+        this.touchStartGem = null;
+        this.isSwiping = false;
     }
     
     handleGemSelection(gem, x, y) {
