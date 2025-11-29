@@ -25,11 +25,6 @@ class GameEngine {
         this.mousePos = { x: 0, y: 0 };
         this.isProcessingMatches = false;
         
-        // Touch tracking for mobile
-        this.touchStartPos = { x: 0, y: 0 };
-        this.touchStartGem = null;
-        this.isSwiping = false;
-        
         // AI integration points
         this.aiHints = [];
         this.aiAnalysis = null;
@@ -224,17 +219,9 @@ class GameEngine {
         const x = (touch.clientX - rect.left) * scaleX;
         const y = (touch.clientY - rect.top) * scaleY;
         
-        // Track touch start position
-        this.touchStartPos = { x, y };
-        this.isSwiping = false;
-        
         const gem = this.grid.getGemAt(x, y);
         if (gem) {
-            this.touchStartGem = gem;
-            // Only select if no gem is currently selected
-            if (!this.selectedGem) {
-                this.handleGemSelection(gem, x, y);
-            }
+            this.handleGemSelection(gem, x, y);
         }
     }
     
@@ -251,17 +238,6 @@ class GameEngine {
         
         this.mousePos.x = x;
         this.mousePos.y = y;
-        
-        // Detect if user is swiping (moved more than 20 pixels)
-        if (!this.isSwiping && this.touchStartGem) {
-            const dx = x - this.touchStartPos.x;
-            const dy = y - this.touchStartPos.y;
-            const distance = Math.sqrt(dx * dx + dy * dy);
-            
-            if (distance > 20) {
-                this.isSwiping = true;
-            }
-        }
     }
     
     handleTouchEnd(e) {
@@ -297,17 +273,8 @@ class GameEngine {
                     this.needsRender = true;
                 }
             }
-        } else if (!this.isSwiping && this.touchStartGem) {
-            // Simple tap - handle as click
-            const gem = this.grid.getGemAt(this.touchStartPos.x, this.touchStartPos.y);
-            if (gem) {
-                this.handleGemSelection(gem, this.touchStartPos.x, this.touchStartPos.y);
-            }
         }
-        
-        // Reset touch tracking
-        this.touchStartGem = null;
-        this.isSwiping = false;
+        // Touch handling is done in touchStart via handleGemSelection
     }
     
     handleGemSelection(gem, x, y) {
