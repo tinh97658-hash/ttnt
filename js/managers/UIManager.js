@@ -386,6 +386,7 @@ class UIManager {
     
     /**
      * ★ HIỂN THỊ KẾT QUẢ SO SÁNH CASCADE
+     * Hiển thị Top 3 nước đi của mỗi phương pháp để thấy sự khác biệt
      */
     displayCascadeComparison(comparison) {
         if (!this.elements.cascadeCompareResult) return;
@@ -398,46 +399,85 @@ class UIManager {
             return `(${move.gem1.row},${move.gem1.col})↔(${move.gem2.row},${move.gem2.col})`;
         };
         
+        // Tạo HTML cho danh sách top moves
+        const createTopMovesHTML = (topMoves, methodName) => {
+            if (!topMoves || topMoves.length === 0) {
+                return '<div style="color: #999;">Không có nước đi</div>';
+            }
+            
+            return topMoves.map((move, index) => {
+                const cascadeInfo = move.cascadeInfo ? 
+                    `<span class="cascade-badge">${move.cascadeInfo.cascadeCount} cascade</span>` : 
+                    '<span class="cascade-badge estimate">ước lượng</span>';
+                
+                return `
+                    <div class="top-move-item ${index === 0 ? 'best' : ''}">
+                        <span class="rank">#${index + 1}</span>
+                        <span class="move-pos">${formatMove(move)}</span>
+                        <span class="move-score">${move.score} pts</span>
+                        ${cascadeInfo}
+                    </div>
+                `;
+            }).join('');
+        };
+        
+        // Tạo HTML cho ranking changes
+        const createRankingChangesHTML = (changes) => {
+            if (!changes || changes.length === 0) {
+                return '<div style="color: #22c55e; font-size: 12px;">Không có thay đổi thứ hạng</div>';
+            }
+            
+            return changes.map(change => {
+                const direction = change.change > 0 ? '↑' : '↓';
+                const color = change.change > 0 ? '#22c55e' : '#ef4444';
+                return `
+                    <div style="font-size: 11px; color: ${color};">
+                        ${formatMove(change.move)}: #${change.rankWithout} → #${change.rankWith} (${direction}${Math.abs(change.change)})
+                    </div>
+                `;
+            }).join('');
+        };
+        
         const html = `
-            <div class="compare-section">
-                <h5>❌ Không có Cascade Prediction</h5>
-                <div class="compare-row">
-                    <span class="compare-label">Nước đi:</span>
-                    <span class="compare-value">${formatMove(without.move)}</span>
+            <div class="compare-columns">
+                <div class="compare-section">
+                    <h5>❌ Ước lượng (Estimate)</h5>
+                    <div class="compare-meta">
+                        <span>⏱️ ${without.time.toFixed(1)}ms</span>
+                    </div>
+                    <div class="top-moves-list">
+                        ${createTopMovesHTML(without.topMoves, 'without')}
+                    </div>
                 </div>
-                <div class="compare-row">
-                    <span class="compare-label">Điểm đánh giá:</span>
-                    <span class="compare-value">${without.score}</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-label">Thời gian:</span>
-                    <span class="compare-value">${without.time.toFixed(1)}ms</span>
-                </div>
-            </div>
-            
-            <div class="compare-section">
-                <h5>✅ Có Cascade Prediction</h5>
-                <div class="compare-row">
-                    <span class="compare-label">Nước đi:</span>
-                    <span class="compare-value ${!compare.sameMove ? 'warning' : ''}">${formatMove(withCascade.move)}</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-label">Điểm đánh giá:</span>
-                    <span class="compare-value highlight">${withCascade.score}</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-label">Thời gian:</span>
-                    <span class="compare-value">${withCascade.time.toFixed(1)}ms</span>
-                </div>
-                <div class="compare-row">
-                    <span class="compare-label">Số cascade dự đoán:</span>
-                    <span class="compare-value highlight">${withCascade.cascadeCount}</span>
+                
+                <div class="compare-section highlight-section">
+                    <h5>✅ Mô phỏng (Simulate)</h5>
+                    <div class="compare-meta">
+                        <span>⏱️ ${withCascade.time.toFixed(1)}ms</span>
+                        <span>🔥 ${withCascade.totalCascade} cascades</span>
+                    </div>
+                    <div class="top-moves-list">
+                        ${createTopMovesHTML(withCascade.topMoves, 'with')}
+                    </div>
                 </div>
             </div>
             
-            <div class="compare-summary ${compare.sameMove ? 'same' : 'different'}">
+            ${compare.rankingChanges.length > 0 ? `
+                <div class="ranking-changes">
+                    <h6>📊 Thay đổi thứ hạng:</h6>
+                    ${createRankingChangesHTML(compare.rankingChanges)}
+                </div>
+            ` : ''}
+            
+            <div class="compare-summary ${compare.sameTop1 ? 'same' : 'different'}">
                 ${compare.recommendation}
-                ${!compare.sameMove ? `<br><small>Chênh lệch điểm: +${compare.scoreDifference}</small>` : ''}
+            </div>
+            
+            <div class="compare-footer">
+                <small>
+                    Chênh lệch thời gian: +${compare.timeDifference.toFixed(1)}ms | 
+                    Top 1 ${compare.sameTop1 ? '✅ giống nhau' : '⚠️ khác nhau'}
+                </small>
             </div>
         `;
         

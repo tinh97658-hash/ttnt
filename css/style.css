@@ -105,10 +105,10 @@ body {
 /* Main Game Layout */
 .game-main {
     display: grid;
-    grid-template-columns: 1fr 300px;
+    grid-template-columns: 1fr 420px;
     gap: 2rem;
     padding: 2rem;
-    max-width: 1200px;
+    max-width: 1400px;
     margin: 0 auto;
 }
 
@@ -179,7 +179,7 @@ body {
     padding: 1.5rem;
     border: 1px solid var(--border);
     box-shadow: 0 4px 8px var(--shadow);
-    max-height: 600px;
+    max-height: 700px;
     overflow-y: auto;
 }
 
@@ -374,16 +374,17 @@ body {
 /* ★ CASCADE COMPARISON PANEL */
 .cascade-comparison {
     margin-top: 1rem;
-    padding: 1rem;
+    padding: 1.25rem;
     background: rgba(99, 102, 241, 0.1);
     border: 1px solid var(--primary-color);
     border-radius: 0.5rem;
 }
 
 .cascade-comparison h4 {
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
     color: var(--primary-color);
-    font-size: 0.95rem;
+    font-size: 1.1rem;
+    font-weight: bold;
 }
 
 .compare-btn {
@@ -391,13 +392,13 @@ body {
     background: linear-gradient(45deg, #8b5cf6, #6366f1);
     color: white;
     border: none;
-    padding: 0.6rem 1rem;
-    border-radius: 0.4rem;
+    padding: 0.75rem 1.25rem;
+    border-radius: 0.5rem;
     cursor: pointer;
     font-weight: bold;
-    font-size: 0.85rem;
+    font-size: 1rem;
     transition: all 0.3s ease;
-    margin-bottom: 0.75rem;
+    margin-bottom: 1rem;
 }
 
 .compare-btn:hover {
@@ -412,15 +413,30 @@ body {
 }
 
 .cascade-compare-result {
-    font-size: 0.8rem;
+    font-size: 0.85rem;
     line-height: 1.5;
+}
+
+/* Layout 2 cột cho so sánh */
+.compare-columns {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
 }
 
 .compare-section {
     background: var(--surface);
     padding: 0.6rem;
-    border-radius: 0.4rem;
+    border-radius: 0.5rem;
     margin-bottom: 0.5rem;
+    min-width: 0;
+    overflow: hidden;
+}
+
+.compare-section.highlight-section {
+    background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(16, 185, 129, 0.1));
+    border: 1px solid rgba(34, 197, 94, 0.3);
 }
 
 .compare-section h5 {
@@ -428,14 +444,115 @@ body {
     color: var(--text-secondary);
     margin-bottom: 0.4rem;
     text-transform: uppercase;
-    letter-spacing: 0.5px;
+    letter-spacing: 0.3px;
+    font-weight: bold;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.compare-meta {
+    display: flex;
+    gap: 0.4rem;
+    font-size: 0.7rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+    flex-wrap: wrap;
+}
+
+/* Top moves list */
+.top-moves-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.top-move-item {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.3rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.3rem;
+    font-size: 0.7rem;
+    overflow: hidden;
+}
+
+.top-move-item.best {
+    background: linear-gradient(90deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.1));
+    border: 1px solid rgba(251, 191, 36, 0.3);
+}
+
+.top-move-item .rank {
+    font-weight: bold;
+    color: var(--accent-color);
+    min-width: 16px;
+    font-size: 0.7rem;
+    flex-shrink: 0;
+}
+
+.top-move-item.best .rank {
+    color: #fbbf24;
+}
+
+.top-move-item .move-pos {
+    flex: 1;
+    font-family: monospace;
+    color: var(--text-primary);
+    font-size: 0.65rem;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    min-width: 0;
+}
+
+.top-move-item .move-score {
+    font-weight: bold;
+    color: var(--success-color);
+    font-size: 0.65rem;
+    flex-shrink: 0;
+    display: none;
+}
+
+.cascade-badge {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    color: white;
+    padding: 0.1rem 0.2rem;
+    border-radius: 0.15rem;
+    font-size: 0.5rem;
+    white-space: nowrap;
+    flex-shrink: 0;
+    display: none;
+}
+    white-space: nowrap;
+}
+
+.cascade-badge.estimate {
+    background: linear-gradient(135deg, #64748b, #475569);
+}
+
+/* Ranking changes */
+.ranking-changes {
+    background: rgba(251, 191, 36, 0.1);
+    padding: 0.75rem;
+    border-radius: 0.5rem;
+    margin-bottom: 0.75rem;
+    border: 1px solid rgba(251, 191, 36, 0.2);
+}
+
+.ranking-changes h6 {
+    font-size: 0.95rem;
+    color: #fbbf24;
+    margin-bottom: 0.5rem;
+    font-weight: bold;
 }
 
 .compare-row {
     display: flex;
     justify-content: space-between;
-    padding: 0.2rem 0;
+    padding: 0.35rem 0;
     border-bottom: 1px solid rgba(255,255,255,0.1);
+    font-size: 0.9rem;
 }
 
 .compare-row:last-child {
@@ -461,11 +578,13 @@ body {
 
 .compare-summary {
     background: linear-gradient(45deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
-    padding: 0.6rem;
-    border-radius: 0.4rem;
+    padding: 0.85rem;
+    border-radius: 0.5rem;
     text-align: center;
     font-weight: bold;
-    margin-top: 0.5rem;
+    margin-top: 0.75rem;
+    font-size: 1rem;
+    line-height: 1.5;
 }
 
 .compare-summary.same {
@@ -474,4 +593,12 @@ body {
 
 .compare-summary.different {
     color: var(--accent-color);
+    background: linear-gradient(45deg, rgba(251, 191, 36, 0.2), rgba(245, 158, 11, 0.2));
+}
+
+.compare-footer {
+    text-align: center;
+    margin-top: 0.6rem;
+    color: var(--text-secondary);
+    font-size: 0.85rem;
 }

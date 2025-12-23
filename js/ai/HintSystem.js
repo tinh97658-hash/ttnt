@@ -110,73 +110,164 @@ class HintSystem {
     }
     
     /**
+     * ★ LẤY TOP N NƯỚC ĐI TỐT NHẤT
+     * Trả về danh sách N nước đi có điểm cao nhất
+     * 
+     * @param {Grid} grid - Lưới game
+     * @param {number} topN - Số lượng nước đi muốn lấy (mặc định 3)
+     * @returns {Array} - Mảng các nước đi được sắp xếp theo điểm giảm dần
+     */
+    getTopMoves(grid, topN = 3) {
+        const possibleMoves = grid.findAllPossibleMoves();
+        
+        if (possibleMoves.length === 0) {
+            return [];
+        }
+        
+        // Đánh giá tất cả nước đi
+        const scoredMoves = possibleMoves.map(move => {
+            const score = this.evaluateMove(grid, move);
+            const matchInfo = this.getMatchInfo(grid, move);
+            
+            // Lấy thông tin cascade nếu có
+            let cascadeInfo = null;
+            if (this.cascadePredictionEnabled && grid.simulateCascades) {
+                cascadeInfo = grid.simulateCascades(move, 5);
+            }
+            
+            return {
+                gem1: move.gem1,
+                gem2: move.gem2,
+                score: score,
+                matchInfo: matchInfo,
+                cascadeInfo: cascadeInfo,
+                reason: this.generateReason(matchInfo)
+            };
+        });
+        
+        // Sắp xếp theo điểm giảm dần
+        scoredMoves.sort((a, b) => b.score - a.score);
+        
+        // Trả về top N
+        return scoredMoves.slice(0, topN);
+    }
+    
+    /**
      * ★ SO SÁNH KẾT QUẢ CÓ/KHÔNG CASCADE PREDICTION
      * Chạy AI với cả 2 chế độ để người dùng thấy sự khác biệt
+     * Hiển thị Top 3 nước đi của mỗi phương pháp để thấy rõ sự khác biệt
      * 
      * @param {Grid} grid - Lưới game
      * @returns {Object} - Kết quả so sánh 2 phương pháp
      */
     compareWithAndWithoutCascade(grid) {
-        const startTimeWithout = performance.now();
-        
-        // 1. Chạy KHÔNG có Cascade Prediction (ước lượng)
         const prevState = this.cascadePredictionEnabled;
+        
+        // ========== 1. CHẠY KHÔNG CÓ CASCADE PREDICTION ==========
+        const startTimeWithout = performance.now();
         this.cascadePredictionEnabled = false;
-        const resultWithout = this.suggestMove(grid);
+        const topMovesWithout = this.getTopMoves(grid, 5); // Lấy top 5
         const timeWithout = performance.now() - startTimeWithout;
         
+        // ========== 2. CHẠY CÓ CASCADE PREDICTION ==========
         const startTimeWith = performance.now();
-        
-        // 2. Chạy CÓ Cascade Prediction (mô phỏng)
         this.cascadePredictionEnabled = true;
-        const resultWith = this.suggestMove(grid);
+        const topMovesWith = this.getTopMoves(grid, 5); // Lấy top 5
         const timeWith = performance.now() - startTimeWith;
         
-        // 3. Khôi phục trạng thái
+        // ========== 3. KHÔI PHỤC TRẠNG THÁI ==========
         this.cascadePredictionEnabled = prevState;
         
-        // 4. Kiểm tra nước đi có khác nhau không
-        const sameMove = resultWithout && resultWith && 
-            resultWithout.gem1.row === resultWith.gem1.row &&
-            resultWithout.gem1.col === resultWith.gem1.col &&
-            resultWithout.gem2.row === resultWith.gem2.row &&
-            resultWithout.gem2.col === resultWith.gem2.col;
+        // ========== 4. PHÂN TÍCH SỰ KHÁC BIỆT ==========
         
-        // 5. Lấy thông tin cascade từ move
-        const cascadeInfo = resultWith && resultWith.matchInfo ? 
-            (grid.simulateCascades ? grid.simulateCascades({
-                gem1: resultWith.gem1,
-                gem2: resultWith.gem2
-            }, 5) : null) : null;
+        // Kiểm tra nước đi top 1 có giống nhau không
+        const top1Same = topMovesWithout.length > 0 && topMovesWith.length > 0 &&
+            topMovesWithout[0].gem1.row === topMovesWith[0].gem1.row &&
+            topMovesWithout[0].gem1.col === topMovesWith[0].gem1.col &&
+            topMovesWithout[0].gem2.row === topMovesWith[0].gem2.row &&
+            topMovesWithout[0].gem2.col === topMovesWith[0].gem2.col;
+        
+        // Tìm các nước đi có thứ hạng khác nhau
+        const rankingChanges = [];
+        topMovesWith.forEach((moveWith, indexWith) => {
+            // Tìm nước đi này trong danh sách không có Cascade
+            const indexWithout = topMovesWithout.findIndex(mw => 
+                mw.gem1.row === moveWith.gem1.row &&
+                mw.gem1.col === moveWith.gem1.col &&
+                mw.gem2.row === moveWith.gem2.row &&
+                mw.gem2.col === moveWith.gem2.col
+            );
+            
+            if (indexWithout !== -1 && indexWithout !== indexWith) {
+                rankingChanges.push({
+                    move: moveWith,
+                    rankWithout: indexWithout + 1,
+                    rankWith: indexWith + 1,
+                    change: indexWithout - indexWith // Dương = lên hạng
+                });
+            }
+        });
+        
+        // Tính tổng cascade của top 3 mỗi bên
+        const totalCascadeWithout = topMovesWithout.slice(0, 3).reduce((sum, m) => 
+            sum + (m.cascadeInfo ? m.cascadeInfo.cascadeCount : 0), 0);
+        const totalCascadeWith = topMovesWith.slice(0, 3).reduce((sum, m) => 
+            sum + (m.cascadeInfo ? m.cascadeInfo.cascadeCount : 0), 0);
         
         return {
             // Kết quả không có Cascade Prediction
             without: {
-                move: resultWithout,
-                score: resultWithout ? resultWithout.evaluationScore : 0,
+                topMoves: topMovesWithout.slice(0, 3),
+                bestMove: topMovesWithout[0] || null,
                 time: timeWithout,
-                method: 'Ước lượng (Estimate)'
+                method: 'Ước lượng (Estimate)',
+                totalCascade: totalCascadeWithout
             },
             // Kết quả có Cascade Prediction  
             with: {
-                move: resultWith,
-                score: resultWith ? resultWith.evaluationScore : 0,
+                topMoves: topMovesWith.slice(0, 3),
+                bestMove: topMovesWith[0] || null,
                 time: timeWith,
                 method: 'Mô phỏng (Simulate)',
-                cascadeCount: cascadeInfo ? cascadeInfo.cascadeCount : 0,
-                cascadeScore: cascadeInfo ? cascadeInfo.totalScore : 0
+                totalCascade: totalCascadeWith
             },
-            // So sánh
+            // Phân tích so sánh
             comparison: {
-                sameMove: sameMove,
-                scoreDifference: resultWith && resultWithout ? 
-                    resultWith.evaluationScore - resultWithout.evaluationScore : 0,
+                sameTop1: top1Same,
+                rankingChanges: rankingChanges,
                 timeDifference: timeWith - timeWithout,
-                recommendation: sameMove ? 
-                    '✅ Cả 2 phương pháp chọn cùng nước đi' : 
-                    '⚠️ Cascade Prediction tìm ra nước đi tốt hơn!'
+                cascadeDifference: totalCascadeWith - totalCascadeWithout,
+                recommendation: this._generateComparisonRecommendation(top1Same, rankingChanges, topMovesWith, topMovesWithout)
             }
         };
+    }
+    
+    /**
+     * ★ TẠO KHUYẾN NGHỊ DỰA TRÊN KẾT QUẢ SO SÁNH
+     */
+    _generateComparisonRecommendation(sameTop1, rankingChanges, topMovesWith, topMovesWithout) {
+        if (!topMovesWith.length || !topMovesWithout.length) {
+            return '❌ Không có nước đi khả dụng';
+        }
+        
+        if (sameTop1 && rankingChanges.length === 0) {
+            return '✅ Cả 2 phương pháp cho kết quả giống nhau. Cascade Prediction không tạo sự khác biệt trong trường hợp này.';
+        }
+        
+        if (sameTop1 && rankingChanges.length > 0) {
+            return `⚠️ Top 1 giống nhau, nhưng có ${rankingChanges.length} nước đi thay đổi thứ hạng. Cascade Prediction giúp đánh giá chính xác hơn các nước đi tiềm năng.`;
+        }
+        
+        // Top 1 khác nhau
+        const scoreDiff = topMovesWith[0].score - topMovesWithout[0].score;
+        const cascadeDiff = (topMovesWith[0].cascadeInfo?.cascadeCount || 0) - 
+                          (topMovesWithout[0].cascadeInfo?.cascadeCount || 0);
+        
+        if (cascadeDiff > 0) {
+            return `🔥 CASCADE PREDICTION TÌM RA NƯỚC ĐI TỐT HƠN! Nước đi mới có ${cascadeDiff} cascade nhiều hơn và điểm cao hơn ${scoreDiff} điểm.`;
+        }
+        
+        return `⚡ Top 1 khác nhau! Cascade Prediction đánh giá lại thứ tự với độ chính xác cao hơn.`;
     }
     
     /**

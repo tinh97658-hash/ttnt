@@ -77,7 +77,7 @@ document.addEventListener('DOMContentLoaded', async function() {
 function setupDebugHelpers() {
     // Global access to game instance
     window.game = game;
-    window.DEBUG_MODE = true;
+    window.DEBUG_MODE = false; // Tắt debug info trên canvas
     
     // Debug functions
     window.debugFunctions = {
