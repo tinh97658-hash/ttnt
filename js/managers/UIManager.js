@@ -22,7 +22,11 @@ class UIManager {
             showPatterns: document.getElementById('show-patterns'),
             predictCascade: document.getElementById('predict-cascade'),
             adaptiveDifficulty: document.getElementById('adaptive-difficulty'),
-            hintOverlay: document.getElementById('hint-overlay')
+            hintOverlay: document.getElementById('hint-overlay'),
+            // ★ NEW: Cascade Comparison elements
+            cascadeComparison: document.getElementById('cascade-comparison'),
+            compareCascadeBtn: document.getElementById('compare-cascade-btn'),
+            cascadeCompareResult: document.getElementById('cascade-compare-result')
         };
         
         // UI state
@@ -71,6 +75,13 @@ class UIManager {
         if (this.elements.adaptiveDifficulty) {
             this.elements.adaptiveDifficulty.addEventListener('change', (e) => {
                 this.toggleAdaptiveDifficulty(e.target.checked);
+            });
+        }
+        
+        // ★ NEW: Compare Cascade button
+        if (this.elements.compareCascadeBtn) {
+            this.elements.compareCascadeBtn.addEventListener('click', () => {
+                this.runCascadeComparison();
             });
         }
         
@@ -224,26 +235,54 @@ class UIManager {
         this.elements.autoSolveBtn.disabled = true;
         
         // Show AI thinking process
-        this.showAIAnalysis("Analyzing board state...");
+        this.showAIAnalysis("🔄 AI đang phân tích bàn cờ...");
+        
+        // ★ Tính thời gian chạy cho Auto Solve
+        const startTime = performance.now();
         
         setTimeout(() => {
-            // Call Game's requestAutoSolve method instead of GameEngine
-            this.gameInstance.requestAutoSolve();
+            // Call Game's requestAutoSolve method and get result
+            const result = this.gameInstance.requestAutoSolve();
+            
+            const endTime = performance.now();
+            const totalTime = endTime - startTime;
+            
+            // Lấy thời gian từ AI (chính xác hơn) hoặc dùng totalTime
+            const evalTime = result?.evalTime || totalTime;
+            
+            // ★ Cập nhật hiển thị thời gian và thống kê
+            this.updatePerformanceStats({
+                evalTime: evalTime,
+                nodesExplored: result?.nodesExplored || 0,
+                depth: result?.depth || this.gameInstance.config.aiDepth
+            });
             
             this.elements.autoSolveBtn.innerHTML = '🤖 Auto Solve';
             this.elements.autoSolveBtn.disabled = false;
             
-            this.showAIAnalysis("Move executed based on Minimax algorithm analysis.");
-        }, 200);
+            // Hiển thị thông tin chi tiết hơn
+            if (result?.success) {
+                const method = result.method || 'AI';
+                const nodes = result.nodesExplored || 0;
+                this.showAIAnalysis(`✅ ${method}\n⏱️ Thời gian: ${evalTime.toFixed(0)}ms\n🔢 Nodes: ${nodes}`);
+            } else {
+                this.showAIAnalysis(`❌ Không tìm được nước đi`);
+            }
+        }, 50);
     }
     
     // Change AI difficulty
     changeDifficulty(difficulty) {
-        const depths = { easy: 2, medium: 3, hard: 5 };
+        const depths = { easy: 2, medium: 3, hard: 10 };
         const depth = depths[difficulty] || 3;
         
         if (this.elements.minimaxDepth) {
             this.elements.minimaxDepth.textContent = depth;
+        }
+        
+        // ★ GỌI GAME.setAIDifficulty() ĐỂ THỰC SỰ THAY ĐỔI DEPTH
+        if (this.gameInstance && this.gameInstance.setAIDifficulty) {
+            this.gameInstance.setAIDifficulty(difficulty);
         }
         
         // Update AI settings in game engine
@@ -251,7 +290,7 @@ class UIManager {
             this.gameEngine.aiOpponent.setDifficulty(difficulty);
         }
         
-        this.showNotification(`AI Difficulty set to ${difficulty.toUpperCase()}`, 'info');
+        this.showNotification(`AI Difficulty set to ${difficulty.toUpperCase()} (Depth: ${depth})`, 'info');
     }
     
     // Toggle AI features
@@ -266,15 +305,143 @@ class UIManager {
         );
     }
     
+    /**
+     * ★ TOGGLE CASCADE PREDICTION
+     * Bật/tắt tính năng mô phỏng cascade khi AI đánh giá nước đi
+     * 
+     * Khi BẬT:
+     * - AI sẽ mô phỏng thực sự các cascade có thể xảy ra
+     * - Kết quả chính xác hơn nhưng chậm hơn
+     * 
+     * Khi TẮT:
+     * - AI chỉ ước lượng tiềm năng cascade
+     * - Nhanh hơn nhưng ít chính xác
+     */
     toggleCascadePrediction(enabled) {
+        // Cập nhật flag trong GameEngine
         if (this.gameEngine) {
             this.gameEngine.cascadePredictionEnabled = enabled;
         }
         
+        // ★ Cập nhật flag trong HintSystem (qua Game instance)
+        if (this.gameInstance && this.gameInstance.aiComponents && this.gameInstance.aiComponents.hintSystem) {
+            this.gameInstance.aiComponents.hintSystem.setCascadePrediction(enabled);
+        }
+        
+        // ★ Hiển thị/ẩn panel so sánh Cascade
+        if (this.elements.cascadeComparison) {
+            this.elements.cascadeComparison.style.display = enabled ? 'block' : 'none';
+        }
+        
+        // Hiển thị thông báo
         this.showNotification(
-            `Cascade Prediction ${enabled ? 'enabled' : 'disabled'}`, 
+            `🔮 Cascade Prediction ${enabled ? 'BẬT - AI sẽ mô phỏng combo' : 'TẮT - AI ước lượng nhanh'}`, 
             enabled ? 'success' : 'info'
         );
+        
+        console.log(`🔮 Cascade Prediction: ${enabled ? 'ENABLED' : 'DISABLED'}`);
+    }
+    
+    /**
+     * ★ CHẠY SO SÁNH CASCADE PREDICTION
+     * So sánh kết quả AI có/không Cascade Prediction
+     */
+    runCascadeComparison() {
+        if (!this.gameInstance || !this.gameInstance.aiComponents || !this.gameInstance.aiComponents.hintSystem) {
+            this.showNotification('❌ Không thể chạy so sánh', 'error');
+            return;
+        }
+        
+        const hintSystem = this.gameInstance.aiComponents.hintSystem;
+        const grid = this.gameEngine.grid;
+        
+        // Disable nút trong khi đang chạy
+        if (this.elements.compareCascadeBtn) {
+            this.elements.compareCascadeBtn.disabled = true;
+            this.elements.compareCascadeBtn.innerHTML = '⏳ Đang so sánh...';
+        }
+        
+        setTimeout(() => {
+            try {
+                // Chạy so sánh
+                const comparison = hintSystem.compareWithAndWithoutCascade(grid);
+                
+                // Hiển thị kết quả
+                this.displayCascadeComparison(comparison);
+                
+            } catch (error) {
+                console.error('Cascade comparison error:', error);
+                if (this.elements.cascadeCompareResult) {
+                    this.elements.cascadeCompareResult.innerHTML = `<div style="color: #ef4444;">❌ Lỗi: ${error.message}</div>`;
+                }
+            }
+            
+            // Enable lại nút
+            if (this.elements.compareCascadeBtn) {
+                this.elements.compareCascadeBtn.disabled = false;
+                this.elements.compareCascadeBtn.innerHTML = '📊 So sánh 2 phương pháp';
+            }
+        }, 50);
+    }
+    
+    /**
+     * ★ HIỂN THỊ KẾT QUẢ SO SÁNH CASCADE
+     */
+    displayCascadeComparison(comparison) {
+        if (!this.elements.cascadeCompareResult) return;
+        
+        const { without, with: withCascade, comparison: compare } = comparison;
+        
+        // Format vị trí move
+        const formatMove = (move) => {
+            if (!move) return 'N/A';
+            return `(${move.gem1.row},${move.gem1.col})↔(${move.gem2.row},${move.gem2.col})`;
+        };
+        
+        const html = `
+            <div class="compare-section">
+                <h5>❌ Không có Cascade Prediction</h5>
+                <div class="compare-row">
+                    <span class="compare-label">Nước đi:</span>
+                    <span class="compare-value">${formatMove(without.move)}</span>
+                </div>
+                <div class="compare-row">
+                    <span class="compare-label">Điểm đánh giá:</span>
+                    <span class="compare-value">${without.score}</span>
+                </div>
+                <div class="compare-row">
+                    <span class="compare-label">Thời gian:</span>
+                    <span class="compare-value">${without.time.toFixed(1)}ms</span>
+                </div>
+            </div>
+            
+            <div class="compare-section">
+                <h5>✅ Có Cascade Prediction</h5>
+                <div class="compare-row">
+                    <span class="compare-label">Nước đi:</span>
+                    <span class="compare-value ${!compare.sameMove ? 'warning' : ''}">${formatMove(withCascade.move)}</span>
+                </div>
+                <div class="compare-row">
+                    <span class="compare-label">Điểm đánh giá:</span>
+                    <span class="compare-value highlight">${withCascade.score}</span>
+                </div>
+                <div class="compare-row">
+                    <span class="compare-label">Thời gian:</span>
+                    <span class="compare-value">${withCascade.time.toFixed(1)}ms</span>
+                </div>
+                <div class="compare-row">
+                    <span class="compare-label">Số cascade dự đoán:</span>
+                    <span class="compare-value highlight">${withCascade.cascadeCount}</span>
+                </div>
+            </div>
+            
+            <div class="compare-summary ${compare.sameMove ? 'same' : 'different'}">
+                ${compare.recommendation}
+                ${!compare.sameMove ? `<br><small>Chênh lệch điểm: +${compare.scoreDifference}</small>` : ''}
+            </div>
+        `;
+        
+        this.elements.cascadeCompareResult.innerHTML = html;
     }
     
     toggleAdaptiveDifficulty(enabled) {

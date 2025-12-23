@@ -370,3 +370,108 @@ body {
         opacity: 1; 
     }
 }
+
+/* ★ CASCADE COMPARISON PANEL */
+.cascade-comparison {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: rgba(99, 102, 241, 0.1);
+    border: 1px solid var(--primary-color);
+    border-radius: 0.5rem;
+}
+
+.cascade-comparison h4 {
+    margin-bottom: 0.75rem;
+    color: var(--primary-color);
+    font-size: 0.95rem;
+}
+
+.compare-btn {
+    width: 100%;
+    background: linear-gradient(45deg, #8b5cf6, #6366f1);
+    color: white;
+    border: none;
+    padding: 0.6rem 1rem;
+    border-radius: 0.4rem;
+    cursor: pointer;
+    font-weight: bold;
+    font-size: 0.85rem;
+    transition: all 0.3s ease;
+    margin-bottom: 0.75rem;
+}
+
+.compare-btn:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
+}
+
+.compare-btn:disabled {
+    opacity: 0.6;
+    cursor: not-allowed;
+    transform: none;
+}
+
+.cascade-compare-result {
+    font-size: 0.8rem;
+    line-height: 1.5;
+}
+
+.compare-section {
+    background: var(--surface);
+    padding: 0.6rem;
+    border-radius: 0.4rem;
+    margin-bottom: 0.5rem;
+}
+
+.compare-section h5 {
+    font-size: 0.75rem;
+    color: var(--text-secondary);
+    margin-bottom: 0.4rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.compare-row {
+    display: flex;
+    justify-content: space-between;
+    padding: 0.2rem 0;
+    border-bottom: 1px solid rgba(255,255,255,0.1);
+}
+
+.compare-row:last-child {
+    border-bottom: none;
+}
+
+.compare-label {
+    color: var(--text-secondary);
+}
+
+.compare-value {
+    font-weight: bold;
+    color: var(--text-primary);
+}
+
+.compare-value.highlight {
+    color: var(--success-color);
+}
+
+.compare-value.warning {
+    color: var(--accent-color);
+}
+
+.compare-summary {
+    background: linear-gradient(45deg, rgba(99, 102, 241, 0.2), rgba(139, 92, 246, 0.2));
+    padding: 0.6rem;
+    border-radius: 0.4rem;
+    text-align: center;
+    font-weight: bold;
+    margin-top: 0.5rem;
+}
+
+.compare-summary.same {
+    color: var(--success-color);
+}
+
+.compare-summary.different {
+    color: var(--accent-color);
+}

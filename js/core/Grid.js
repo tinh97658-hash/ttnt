@@ -862,6 +862,292 @@ class Grid {
         return this.findAllPossibleMoves().length > 0;
     }
 
+    /**
+     * ============================================================================
+     * SIMULATE CASCADES - MÔ PHỎNG CHUỖI COMBO
+     * ============================================================================
+     * 
+     * MỤC ĐÍCH:
+     * Mô phỏng một nước đi và đếm số cascade (combo) sẽ xảy ra
+     * Được sử dụng bởi AI để đánh giá tiềm năng của nước đi
+     * 
+     * THUẬT TOÁN:
+     * 1. Clone grid hiện tại (deep copy)
+     * 2. Thực hiện swap trên bản sao
+     * 3. Lặp:
+     *    a. Tìm matches
+     *    b. Nếu không có match → dừng
+     *    c. Xóa matches, tính điểm
+     *    d. Áp dụng gravity (gem rơi xuống)
+     *    e. Tăng cascade count
+     * 4. Trả về kết quả chi tiết
+     * 
+     * ĐỘ PHỨC TẠP:
+     * - Thời gian: O(C × M) với C = số cascade, M = chi phí tìm match
+     * - Không gian: O(N) với N = số ô trong lưới (cho clone)
+     * 
+     * @param {Object} move - Nước đi {gem1: {row, col}, gem2: {row, col}}
+     * @param {number} maxCascades - Giới hạn số cascade mô phỏng (mặc định: 10)
+     * @returns {Object} - Kết quả mô phỏng chi tiết
+     */
+    simulateCascades(move, maxCascades = 10) {
+        // Kết quả mô phỏng
+        const result = {
+            cascadeCount: 0,        // Số lần cascade xảy ra
+            totalScore: 0,          // Tổng điểm dự kiến
+            totalGemsCleared: 0,    // Tổng số gem bị xóa
+            matchDetails: [],       // Chi tiết từng match [{size, cascade_level}]
+            specialGemsCreated: 0,  // Số gem đặc biệt được tạo
+            maxChainLength: 0       // Chuỗi combo dài nhất
+        };
+        
+        // Kiểm tra input hợp lệ
+        if (!move || !move.gem1 || !move.gem2) {
+            return result;
+        }
+        
+        // Clone grid để mô phỏng (không ảnh hưởng game thật)
+        const clonedGrid = this.deepCloneForSimulation();
+        
+        // Thực hiện swap trên bản sao
+        const gem1 = clonedGrid.gems[move.gem1.row]?.[move.gem1.col];
+        const gem2 = clonedGrid.gems[move.gem2.row]?.[move.gem2.col];
+        
+        if (!gem1 || !gem2) {
+            return result;
+        }
+        
+        // Swap gems (chỉ hoán đổi type)
+        const tempType = gem1.type;
+        gem1.type = gem2.type;
+        gem2.type = tempType;
+        
+        // Vòng lặp mô phỏng cascade
+        let cascadeLevel = 0;
+        let hasMatches = true;
+        
+        while (hasMatches && cascadeLevel < maxCascades) {
+            // Tìm matches hiện tại
+            const matches = this.findMatchesOnClone(clonedGrid);
+            
+            if (matches.length === 0) {
+                hasMatches = false;
+                break;
+            }
+            
+            // Ghi nhận cascade
+            cascadeLevel++;
+            result.cascadeCount = cascadeLevel;
+            
+            // Tính điểm cho cascade này
+            const baseScore = matches.length * 10;
+            const cascadeMultiplier = 1 + (cascadeLevel - 1) * 0.5; // Cascade bonus
+            const cascadeScore = Math.floor(baseScore * cascadeMultiplier);
+            
+            result.totalScore += cascadeScore;
+            result.totalGemsCleared += matches.length;
+            
+            // Ghi chi tiết match
+            result.matchDetails.push({
+                cascadeLevel: cascadeLevel,
+                gemsCleared: matches.length,
+                score: cascadeScore
+            });
+            
+            // Kiểm tra match lớn (tạo gem đặc biệt)
+            const matchGroups = this.groupMatchesForSimulation(matches);
+            matchGroups.forEach(group => {
+                if (group.length >= 4) {
+                    result.specialGemsCreated++;
+                }
+            });
+            
+            // Xóa matches trên clone
+            matches.forEach(match => {
+                clonedGrid.gems[match.row][match.col] = null;
+            });
+            
+            // Áp dụng gravity trên clone
+            this.applyGravityOnClone(clonedGrid);
+        }
+        
+        // Cập nhật max chain
+        result.maxChainLength = cascadeLevel;
+        
+        return result;
+    }
+    
+    /**
+     * Deep clone grid để mô phỏng an toàn
+     * Chỉ clone data cần thiết (type) để tối ưu bộ nhớ
+     */
+    deepCloneForSimulation() {
+        const cloned = {
+            rows: this.rows,
+            cols: this.cols,
+            gems: []
+        };
+        
+        for (let row = 0; row < this.rows; row++) {
+            cloned.gems[row] = [];
+            for (let col = 0; col < this.cols; col++) {
+                if (this.gems[row][col]) {
+                    // Chỉ clone properties cần thiết
+                    cloned.gems[row][col] = {
+                        row: row,
+                        col: col,
+                        type: this.gems[row][col].type,
+                        isSpecial: this.gems[row][col].isSpecial || false
+                    };
+                } else {
+                    cloned.gems[row][col] = null;
+                }
+            }
+        }
+        
+        return cloned;
+    }
+    
+    /**
+     * Tìm matches trên cloned grid (không dùng cache)
+     */
+    findMatchesOnClone(clonedGrid) {
+        const matches = new Set();
+        
+        // Check horizontal matches
+        for (let row = 0; row < clonedGrid.rows; row++) {
+            for (let col = 0; col < clonedGrid.cols - 2; col++) {
+                const gem = clonedGrid.gems[row][col];
+                if (!gem) continue;
+                
+                let matchLength = 1;
+                for (let c = col + 1; c < clonedGrid.cols; c++) {
+                    const nextGem = clonedGrid.gems[row][c];
+                    if (nextGem && nextGem.type === gem.type) {
+                        matchLength++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (matchLength >= 3) {
+                    for (let c = col; c < col + matchLength; c++) {
+                        matches.add(`${row},${c}`);
+                    }
+                }
+            }
+        }
+        
+        // Check vertical matches
+        for (let col = 0; col < clonedGrid.cols; col++) {
+            for (let row = 0; row < clonedGrid.rows - 2; row++) {
+                const gem = clonedGrid.gems[row][col];
+                if (!gem) continue;
+                
+                let matchLength = 1;
+                for (let r = row + 1; r < clonedGrid.rows; r++) {
+                    const nextGem = clonedGrid.gems[r][col];
+                    if (nextGem && nextGem.type === gem.type) {
+                        matchLength++;
+                    } else {
+                        break;
+                    }
+                }
+                
+                if (matchLength >= 3) {
+                    for (let r = row; r < row + matchLength; r++) {
+                        matches.add(`${r},${col}`);
+                    }
+                }
+            }
+        }
+        
+        // Convert to array of {row, col}
+        return Array.from(matches).map(pos => {
+            const [row, col] = pos.split(',').map(Number);
+            return { row, col };
+        });
+    }
+    
+    /**
+     * Áp dụng gravity trên cloned grid
+     */
+    applyGravityOnClone(clonedGrid) {
+        for (let col = 0; col < clonedGrid.cols; col++) {
+            // Đếm và dồn gem xuống dưới
+            const columnGems = [];
+            for (let row = clonedGrid.rows - 1; row >= 0; row--) {
+                if (clonedGrid.gems[row][col]) {
+                    columnGems.push(clonedGrid.gems[row][col]);
+                }
+            }
+            
+            // Đặt lại gem từ dưới lên
+            for (let row = clonedGrid.rows - 1; row >= 0; row--) {
+                const gemIndex = clonedGrid.rows - 1 - row;
+                if (gemIndex < columnGems.length) {
+                    clonedGrid.gems[row][col] = columnGems[gemIndex];
+                    clonedGrid.gems[row][col].row = row;
+                } else {
+                    // Tạo gem mới random cho ô trống phía trên
+                    clonedGrid.gems[row][col] = {
+                        row: row,
+                        col: col,
+                        type: Math.floor(Math.random() * 6) + 1,
+                        isSpecial: false
+                    };
+                }
+            }
+        }
+    }
+    
+    /**
+     * Nhóm matches thành các connected components (cho simulation)
+     */
+    groupMatchesForSimulation(matches) {
+        const groups = [];
+        const visited = new Set();
+        
+        matches.forEach(match => {
+            const key = `${match.row},${match.col}`;
+            if (visited.has(key)) return;
+            
+            const group = [];
+            const stack = [match];
+            
+            while (stack.length > 0) {
+                const current = stack.pop();
+                const currentKey = `${current.row},${current.col}`;
+                
+                if (visited.has(currentKey)) continue;
+                visited.add(currentKey);
+                group.push(current);
+                
+                // Check adjacent matches
+                const neighbors = [
+                    { row: current.row - 1, col: current.col },
+                    { row: current.row + 1, col: current.col },
+                    { row: current.row, col: current.col - 1 },
+                    { row: current.row, col: current.col + 1 }
+                ];
+                
+                neighbors.forEach(neighbor => {
+                    const neighborKey = `${neighbor.row},${neighbor.col}`;
+                    if (!visited.has(neighborKey)) {
+                        const found = matches.find(m => m.row === neighbor.row && m.col === neighbor.col);
+                        if (found) {
+                            stack.push(found);
+                        }
+                    }
+                });
+            }
+            
+            groups.push(group);
+        });
+        
+        return groups;
+    }
+
     // Reset board for new game
     reset() {
         this.initializeGrid();

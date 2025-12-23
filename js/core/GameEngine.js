@@ -38,6 +38,12 @@ class GameEngine {
             averageThinkTime: 0
         };
 
+        // ★ AI FEATURE FLAGS
+        // Cascade Prediction: Khi bật, AI sẽ mô phỏng cascade để đánh giá nước đi tốt hơn
+        this.cascadePredictionEnabled = false;
+        // Adaptive Difficulty: Tự động điều chỉnh độ khó theo trình độ người chơi
+        this.adaptiveDifficultyEnabled = false;
+
         // External observer callback (Game will set this)
         this.onStateChanged = null;
 

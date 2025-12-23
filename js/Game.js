@@ -18,7 +18,9 @@ class Game {
             enableAI: true,
             enableAnimations: true,
             enableSound: false,
-            debugMode: false
+            debugMode: false,
+            aiDifficulty: 'medium',  // easy, medium, hard
+            aiDepth: 3               // Depth cho Minimax (2-10)
         };
         
         // Game state flags
@@ -137,7 +139,7 @@ class Game {
             }
             
             if (!this.aiComponents.minimaxSolver) {
-                this.aiComponents.minimaxSolver = new MinimaxSolver();
+                this.aiComponents.minimaxSolver = new MinimaxSolver(this.config.aiDepth);
             }
             
             if (!this.aiComponents.patternRecognizer) {
@@ -326,6 +328,20 @@ class Game {
         this.autoSave();
     }
     
+    // Thay đổi độ khó AI (được gọi từ UIManager)
+    setAIDifficulty(difficulty) {
+        const depths = { easy: 2, medium: 3, hard: 10 };
+        this.config.aiDifficulty = difficulty;
+        this.config.aiDepth = depths[difficulty] || 3;
+        
+        // Cập nhật depth trong MinimaxSolver nếu đã được khởi tạo
+        if (this.aiComponents.minimaxSolver) {
+            this.aiComponents.minimaxSolver.maxDepth = this.config.aiDepth;
+        }
+        
+        console.log(`🎚️ AI Difficulty changed to ${difficulty.toUpperCase()} (depth: ${this.config.aiDepth})`);
+    }
+    
     // Request AI hint
     requestAIHint() {
         if (!this.config.enableAI || !this.aiComponents.hintSystem) {
@@ -360,7 +376,7 @@ class Game {
     requestAutoSolve() {
         if (!this.config.enableAI) {
             this.uiManager.showNotification('❌ Auto-solve không khả dụng!', 'error', 2000);
-            return false;
+            return { success: false };
         }
         
         try {
@@ -370,28 +386,54 @@ class Game {
             let bestMove = null;
             let moveScore = 0;
             let method = '';
+            let nodesExplored = 0;
+            let evalTime = 0;
             
-            // 1. Try HintSystem first (fast and reliable)
-            if (this.aiComponents.hintSystem && this.aiComponents.hintSystem.suggestMove) {
-                const hint = this.aiComponents.hintSystem.suggestMove(this.gameEngine.grid);
-                if (hint && hint.gem1 && hint.gem2) {
-                    bestMove = { gem1: hint.gem1, gem2: hint.gem2 };
-                    moveScore = hint.matchInfo ? hint.matchInfo.estimatedScore : hint.evaluationScore || 0;
-                    method = 'HintSystem';
+            // ★ NẾU HARD MODE (depth >= 5) → DÙNG MINIMAX TRƯỚC
+            const useMinimaxFirst = this.config.aiDepth >= 5;
+            
+            if (useMinimaxFirst) {
+                // HARD MODE: Dùng Minimax với depth cao
+                console.log(`🧠 Using Minimax with depth ${this.config.aiDepth}...`);
+                
+                if (this.aiComponents.minimaxSolver && this.aiComponents.minimaxSolver.findBestMove) {
+                    const solution = this.aiComponents.minimaxSolver.findBestMove(this.gameEngine.grid, this.config.aiDepth);
+                    
+                    // Lấy thông tin từ solution
+                    nodesExplored = solution?.nodesExplored || 0;
+                    evalTime = solution?.evaluationTime || 0;
+                    
+                    console.log(`⏱️ Minimax took ${evalTime.toFixed(0)}ms, explored ${nodesExplored} nodes`);
+                    
+                    if (solution && solution.move && !solution.aborted) {
+                        bestMove = solution.move;
+                        moveScore = solution.score || 0;
+                        method = `Minimax (depth=${this.config.aiDepth})`;
+                    }
+                }
+            } else {
+                // EASY/MEDIUM MODE: Dùng HintSystem (Greedy - nhanh)
+                if (this.aiComponents.hintSystem && this.aiComponents.hintSystem.suggestMove) {
+                    const hint = this.aiComponents.hintSystem.suggestMove(this.gameEngine.grid);
+                    if (hint && hint.gem1 && hint.gem2) {
+                        bestMove = { gem1: hint.gem1, gem2: hint.gem2 };
+                        moveScore = hint.matchInfo ? hint.matchInfo.estimatedScore : hint.evaluationScore || 0;
+                        method = 'Greedy Search';
+                    }
                 }
             }
             
-            // 2. Fallback to MinimaxSolver if HintSystem fails
+            // Fallback to MinimaxSolver if primary method fails
             if (!bestMove && this.aiComponents.minimaxSolver && this.aiComponents.minimaxSolver.findBestMove) {
-                const solution = this.aiComponents.minimaxSolver.findBestMove(this.gameEngine.grid);
+                const solution = this.aiComponents.minimaxSolver.findBestMove(this.gameEngine.grid, this.config.aiDepth);
                 if (solution && solution.move && !solution.aborted) {
                     bestMove = solution.move;
                     moveScore = solution.score || 0;
-                    method = 'Minimax';
+                    method = 'Minimax (fallback)';
                 }
             }
             
-            // 3. Final fallback: use best move from grid
+            // Final fallback: use best move from grid
             if (!bestMove && this.gameEngine.grid) {
                 const possibleMoves = this.gameEngine.grid.findAllPossibleMoves();
                 if (possibleMoves.length > 0) {
@@ -410,7 +452,6 @@ class Game {
                 if (moveScore > 0) {
                     message = `🤖 Auto-solve (${method}): ~${moveScore} điểm dự kiến`;
                 } else {
-                    // Edge case: move exists but score calculation returned 0
                     message = `🤖 Auto-solve (${method}): đang thực hiện...`;
                 }
                 
@@ -418,17 +459,26 @@ class Game {
                 
                 console.log(`✅ Auto-solve used ${method} - Expected score: ${moveScore}`);
                 this.autoSave();
-                return true;
+                
+                // ★ Trả về object chứa thông tin chi tiết
+                return {
+                    success: true,
+                    method: method,
+                    nodesExplored: nodesExplored,
+                    evalTime: evalTime,
+                    depth: this.config.aiDepth,
+                    score: moveScore
+                };
             }
             
             // No valid moves found
             this.uiManager.showNotification('🤖 Không tìm thấy nước đi hợp lệ!', 'warning', 2000);
-            return false;
+            return { success: false };
             
         } catch (error) {
             console.error('❌ Auto-solve error:', error);
             this.uiManager.showNotification('❌ Lỗi auto-solve!', 'error', 2000);
-            return false;
+            return { success: false, error: error.message };
         }
     }
     
